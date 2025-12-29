@@ -1,0 +1,6 @@
+PySide6
+qtawesome
+plotly
+pandas
+openpyxl
+psycopg2-binary

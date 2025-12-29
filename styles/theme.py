@@ -1,0 +1,41 @@
+# styles/theme.py
+
+# --- GERAL ---
+COLOR_BACKGROUND = "#12161f"
+COLOR_CARD_BG    = "#1b212d"
+COLOR_CARD_BORDER= "#2c3545"
+COLOR_TEXT       = "#dce1e8"
+COLOR_TEXT_DIM   = "#a0aec0"
+
+# --- INPUTS ---
+COLOR_INPUT_BG   = "#171c26"
+COLOR_INPUT_BORDER = "#2c3545"
+COLOR_FOCUS      = "#3a5f8a"
+
+# --- TABELAS ---
+COLOR_TABLE_BG   = "#171c26"
+COLOR_TABLE_ALT  = "#202736"
+COLOR_HEADER_BG  = "#283042"
+COLOR_SELECTION  = "#3a5f8a"
+COLOR_HOVER_ROW  = "#2a3441" # Cor leve para o hover da linha
+
+# --- BOTÕES E STATUS ---
+COLOR_PRIMARY    = "#2e7d32"
+COLOR_PRIMARY_HOVER = "#388e3c"
+COLOR_SECONDARY  = "#1b212d"
+COLOR_SECONDARY_BORDER = "#2c3e50"
+COLOR_DANGER     = "#f56565"
+COLOR_SUCCESS    = "#48bb78"
+COLOR_WARNING    = "#ecc94b"
+COLOR_INFO       = "#63b3ed"
+
+# --- CALENDÁRIO (POPUP) ---
+COLOR_CALENDAR_BG = "#1b212d"
+COLOR_CALENDAR_SEL = "#3a5f8a"
+
+# --- CORES GRÁFICOS (Dashboard) --- <--- ESTA PARTE FALTAVA
+CHART_BLUE_PRIMARY   = "#3182ce"
+CHART_CYAN_TEAL      = "#38b2ac"
+CHART_INDIGO         = "#5a67d8"
+CHART_NEON_BLUE      = "#63b3ed"
+CHART_LINE_HIGHLIGHT = "#00b5d8"
