@@ -9,34 +9,37 @@ import qtawesome as qta
 
 from controllers import DashboardController
 
-# --- Estilos ---
-from styles.dashboard_styles import DASHBOARD_STYLES
+# Importamos o CSS e as Funções de Estilo
+from styles.dashboard_styles import (
+    DASHBOARD_STYLES, 
+    apply_chart_theme, 
+    get_plotly_html_wrapper
+)
 from styles.theme import (
-    COLOR_CARD_BG, COLOR_CARD_BORDER, COLOR_TEXT, COLOR_TEXT_DIM,
-    COLOR_SUCCESS, COLOR_DANGER, COLOR_WARNING,
-    CHART_BLUE_PRIMARY, CHART_CYAN_TEAL, CHART_INDIGO, 
-    CHART_NEON_BLUE, CHART_LINE_HIGHLIGHT, COLOR_INFO
+    COLOR_DANGER, COLOR_SUCCESS, COLOR_WARNING, COLOR_TEXT_DIM,
+    CHART_BLUE_PRIMARY, CHART_INDIGO, CHART_NEON_BLUE, CHART_LINE_HIGHLIGHT, 
+    COLOR_CARD_BORDER, COLOR_TEXT
 )
 
 class PlotlyWidget(QWebEngineView):
     def __init__(self, fig):
         super().__init__()
+        # Configuração funcional do Widget
         self.page().setBackgroundColor(Qt.transparent)
         self.settings().setAttribute(self.settings().WebAttribute.ShowScrollBars, False)
-        config = {'scrollZoom': False, 'displayModeBar': False, 'responsive': True}
-        html = fig.to_html(include_plotlyjs='cdn', full_html=False, config=config)
-        
-        full_html = f"""<html><head><style>
-        body {{ background-color: {COLOR_CARD_BG}; margin: 0; padding: 0; overflow: hidden; }}
-        </style></head><body>{html}</body></html>"""
-        self.setHtml(full_html)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        
+        # A estilização HTML agora vem do arquivo de estilos
+        full_html = get_plotly_html_wrapper(fig)
+        self.setHtml(full_html)
 
 class PageDashboard(QWidget):
     def __init__(self):
         super().__init__()
         self.controller = DashboardController()
         self.setWindowTitle("Dashboard Garantia")
+        
+        # Define o CSS global da tela
         self.setStyleSheet(DASHBOARD_STYLES)
 
         main_layout = QVBoxLayout(self) 
@@ -45,8 +48,10 @@ class PageDashboard(QWidget):
 
         # --- TOPO ---
         top_bar = QHBoxLayout()
+        
+        # Agora usamos ObjectName, sem CSS inline
         lbl_titulo = QLabel("Visão Geral - Indicadores")
-        lbl_titulo.setStyleSheet(f"font-size: 20px; font-weight: bold; color: {CHART_NEON_BLUE}; background: transparent;")
+        lbl_titulo.setObjectName("DashboardTitle")
         
         btn_refresh = QPushButton(" Atualizar")
         btn_refresh.setObjectName("btn_nav")
@@ -61,21 +66,25 @@ class PageDashboard(QWidget):
         # --- GRID 2x2 ---
         self.grid = QGridLayout()
         self.grid.setSpacing(20)
-        self.grid.setColumnStretch(0, 1)
-        self.grid.setColumnStretch(1, 1)
-        self.grid.setRowStretch(0, 1)
-        self.grid.setRowStretch(1, 1)
+        # Stretches iguais para distribuição 2x2
+        for i in range(2):
+            self.grid.setColumnStretch(i, 1)
+            self.grid.setRowStretch(i, 1)
 
         main_layout.addLayout(self.grid)
         
         self.carregar_dados()
 
     def carregar_dados(self):
+        # Limpa widgets anteriores
         while self.grid.count():
             item = self.grid.takeAt(0)
             if item.widget(): item.widget().deleteLater()
 
         kpis = self.controller.get_kpis()
+        
+        # Criação dos Gráficos
+        # Nota: A View monta os dados, mas o estilo final é aplicado pelas helpers
         
         # 1. Financeiro
         fig1 = self.criar_grafico_financeiro(kpis.comparativo_financeiro)
@@ -89,8 +98,7 @@ class PageDashboard(QWidget):
         fig3 = self.criar_grafico_entrada(kpis.entrada_mensal)
         self.grid.addWidget(self.criar_card("Itens Recebidos por Mês (Qtd x R$)", fig3), 1, 0)
 
-        # 4. Velocímetro (GAP Cronológico)
-        # Passamos o novo campo do DTO
+        # 4. Velocímetro
         fig4 = self.criar_grafico_defasagem(kpis.gap_cronologico)
         self.grid.addWidget(self.criar_card("Dias de Atraso (Recebimento vs Hoje)", fig4), 1, 1)
 
@@ -98,31 +106,34 @@ class PageDashboard(QWidget):
         card = QFrame(objectName="Card")
         layout = QVBoxLayout(card)
         layout.setContentsMargins(10, 10, 10, 10)
+        
         lbl = QLabel(titulo)
         lbl.setObjectName("CardTitle")
         layout.addWidget(lbl)
-        if fig: layout.addWidget(PlotlyWidget(fig))
-        else: layout.addWidget(QLabel("Sem dados", styleSheet="color: #666; font-style: italic;"))
+        
+        if fig: 
+            layout.addWidget(PlotlyWidget(fig))
+        else: 
+            # Inline style simples para label de fallback é aceitável, ou pode criar ID
+            layout.addWidget(QLabel("Sem dados", styleSheet="color: #666; font-style: italic;"))
+            
         return card
 
-    # --- LÓGICA DE DATA ---
+    # --- LÓGICA DE DATA (Helper de Visualização) ---
     def formatar_data_pt(self, data_iso):
         """Converte '2025-12' para 'Dez/25'."""
         if not data_iso or '-' not in str(data_iso): return str(data_iso)
         try:
             parts = str(data_iso).split('-')
             if len(parts) < 2: return data_iso
-            ano, mes = parts[0], parts[1]
             meses = {'01': 'Jan', '02': 'Fev', '03': 'Mar', '04': 'Abr', '05': 'Mai', '06': 'Jun',
                      '07': 'Jul', '08': 'Ago', '09': 'Set', '10': 'Out', '11': 'Nov', '12': 'Dez'}
-            nome_mes = meses.get(mes, mes)
-            ano_curto = ano[2:] if len(ano) == 4 else ano
-            return f"{nome_mes}/{ano_curto}"
+            return f"{meses.get(parts[1], parts[1])}/{parts[0][2:] if len(parts[0]) == 4 else parts[0]}"
         except:
             return data_iso
 
-    # --- GRÁFICOS ---
-
+    # --- MONTAGEM DOS GRÁFICOS (Estrutura de Dados) ---
+    
     def criar_grafico_financeiro(self, dados):
         if not dados: return None
         meses = [self.formatar_data_pt(d.mes) for d in dados]
@@ -141,9 +152,10 @@ class PageDashboard(QWidget):
             hovertemplate='R$ %{y:,.2f}'
         ))
         fig.update_xaxes(type='category')
-        self._apply_theme(fig)
         fig.update_layout(legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
-        return fig
+        
+        # APLICA O TEMA EXTERNO
+        return apply_chart_theme(fig)
 
     def criar_grafico_status(self, dados):
         if not dados: return None
@@ -156,9 +168,10 @@ class PageDashboard(QWidget):
             labels=labels, values=values, hole=.5, marker=dict(colors=colors),
             textinfo='percent+label', textfont=dict(color='white')
         )])
-        self._apply_theme(fig)
         fig.update_layout(legend=dict(orientation="h", yanchor="top", y=-0.1))
-        return fig
+        
+        # APLICA O TEMA EXTERNO
+        return apply_chart_theme(fig)
 
     def criar_grafico_entrada(self, dados):
         if not dados: return None
@@ -177,74 +190,45 @@ class PageDashboard(QWidget):
         ), secondary_y=True)
 
         fig.update_xaxes(type='category')
-        self._apply_theme(fig)
         fig.update_layout(legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
         fig.update_yaxes(showgrid=False, secondary_y=False)
         fig.update_yaxes(showgrid=False, secondary_y=True)
-        return fig
+        
+        # APLICA O TEMA EXTERNO
+        return apply_chart_theme(fig)
 
     def criar_grafico_defasagem(self, valor_dias):
-        """
-        Calcula a 'Recência' da informação.
-        Valor mostrado = Hoje - DataRecebimento da Última Nota Lançada.
-        """
         if valor_dias is None: return None
-        
-        # Meta: O ideal é que a equipe esteja processando itens que chegaram a no máximo 2 dias.
         META = 2.0 
-
         fig = go.Figure(go.Indicator(
             mode = "gauge+number+delta",
             value = valor_dias,
-            
-            # ACELERADOR:
-            # increasing color = Vermelho (Pois se o gap sobe, estamos atrasando mais)
-            # decreasing color = Verde (Pois se o gap desce, estamos alcançando o dia atual)
             delta = {
-                'reference': META, 
-                'position': "top",
+                'reference': META, 'position': "top",
                 'increasing': {'color': COLOR_DANGER}, 
                 'decreasing': {'color': COLOR_SUCCESS} 
             },
-            
             title = {
                 'text': "Idade da Nota Mais Recente", 
                 'font': {'size': 14, 'color': COLOR_TEXT_DIM}
             },
-            
             gauge = {
-                # Faixa até 20 dias para cobrir o cenário de atraso
                 'axis': {'range': [0, 20], 'tickwidth': 1, 'tickcolor': COLOR_TEXT},
-                'bar': {'color': CHART_NEON_BLUE}, # Cor do ponteiro
+                'bar': {'color': CHART_NEON_BLUE},
                 'bgcolor': "rgba(0,0,0,0)",
                 'borderwidth': 2,
                 'bordercolor': COLOR_CARD_BORDER,
-                
-                # Faixas de Cores
                 'steps': [
-                    {'range': [0, 3], 'color': "rgba(72, 187, 120, 0.2)"},   # 0-3 dias: Ótimo (Tempo Real)
-                    {'range': [3, 7], 'color': "rgba(236, 201, 75, 0.2)"},   # 3-7 dias: Atenção (Semanal)
-                    {'range': [7, 20], 'color': "rgba(245, 101, 101, 0.2)"}  # >7 dias: Crítico
+                    {'range': [0, 3], 'color': "rgba(72, 187, 120, 0.2)"},
+                    {'range': [3, 7], 'color': "rgba(236, 201, 75, 0.2)"},
+                    {'range': [7, 20], 'color': "rgba(245, 101, 101, 0.2)"}
                 ],
-                
-                # Linha da Meta
                 'threshold': {
                     'line': {'color': "white", 'width': 4},
-                    'thickness': 0.75,
-                    'value': META
+                    'thickness': 0.75, 'value': META
                 }
             }
         ))
         
-        self._apply_theme(fig)
-        return fig
-
-    def _apply_theme(self, fig):
-        fig.update_layout(
-            paper_bgcolor=COLOR_CARD_BG, plot_bgcolor=COLOR_CARD_BG,
-            font_color=COLOR_TEXT, font_family="Segoe UI",
-            margin=dict(l=10, r=10, t=30, b=10),
-            xaxis=dict(showgrid=False, linecolor=COLOR_CARD_BORDER),
-            yaxis=dict(showgrid=False, zeroline=False),
-            hovermode="x unified"
-        )
+        # APLICA O TEMA EXTERNO
+        return apply_chart_theme(fig)

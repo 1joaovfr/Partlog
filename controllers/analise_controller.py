@@ -3,14 +3,14 @@ from models import AnaliseModel
 from dtos.analise_dto import ItemPendenteDTO, ResultadoAnaliseDTO
 
 class AnaliseController:
+    """Controla o fluxo da tela de Análise Técnica."""
+    
     def __init__(self):
         self.model = AnaliseModel()
 
     def listar_pendentes(self) -> list[ItemPendenteDTO]:
-        # 1. Busca dados crus (dicts) do Model
         dados_brutos = self.model.get_itens_pendentes()
         
-        # 2. Converte para lista de DTOs
         lista_dto = []
         for row in dados_brutos:
             dto = ItemPendenteDTO(
@@ -27,7 +27,7 @@ class AnaliseController:
         return lista_dto
 
     def salvar_analise(self, id_item, dados_dict):
-        # 1. Cria o DTO de salvamento
+        """Prepara o DTO com o resultado da análise técnica e envia para persistência."""
         dto = ResultadoAnaliseDTO(
             id_item=id_item,
             serie=dados_dict['serie'],
@@ -36,8 +36,7 @@ class AnaliseController:
             cod_avaria=dados_dict['cod_avaria'],
             desc_avaria=dados_dict['desc_avaria'],
             status_resultado=dados_dict['status_resultado'],
-            data_analise=datetime.now().date() # Data gerada aqui ou no Model
+            data_analise=datetime.now().date()
         )
         
-        # 2. Manda o Model persistir
         self.model.atualizar_analise(dto)

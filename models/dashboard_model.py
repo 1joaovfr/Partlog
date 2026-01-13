@@ -1,11 +1,19 @@
 from database.connection import DatabaseConnection
 
 class DashboardModel:
+    """
+    Camada de acesso a dados para os indicadores gerenciais (KPIs).
+    Responsável por queries analíticas e agregações financeiras.
+    """
+    
     def __init__(self):
         self.db = DatabaseConnection()
 
     def get_kpi_financeiro(self):
-        """Calcula totais financeiros apenas dos itens PROCEDENTES (Peça + Ressarcimento)."""
+        """
+        Calcula o impacto financeiro total das garantias procedentes.
+        Retorna: Dict com Total (R$), Quantidade e Ticket Médio.
+        """
         sql = """
             SELECT
                 SUM(valor_item + ressarcimento) as total_custo,
@@ -14,19 +22,20 @@ class DashboardModel:
             WHERE procedente_improcedente = 'Procedente'
         """
         res = self.db.execute_query(sql, fetch=True)
+        
         if res and res[0]['total_custo']:
             total = float(res[0]['total_custo'])
             qtd = int(res[0]['qtd'])
             medio = total / qtd if qtd > 0 else 0.0
             return {'total': total, 'qtd': qtd, 'medio': medio}
+            
         return {'total': 0.0, 'qtd': 0, 'medio': 0.0}
 
     def get_gap_atual_recebimento(self):
         """
-        Calcula o 'Gap Cronológico' do sistema.
-        Lógica: Data de Hoje - A data de recebimento MAIS RECENTE registrada no banco.
-        
-        Isso responde: "A nota mais nova que temos no sistema chegou há quanto tempo?"
+        Calcula o 'Lead Time' de entrada (Gap Cronológico).
+        Métrica: Diferença em dias entre HOJE e a data da nota mais recente lançada.
+        Objetivo: Monitorar atraso no lançamento de notas fiscais.
         """
         sql = """
             SELECT CURRENT_DATE - MAX(data_recebimento) as dias_defasagem
@@ -35,14 +44,14 @@ class DashboardModel:
         """
         res = self.db.execute_query(sql, fetch=True)
         
-        # Se o banco estiver vazio, retorna 0. Se tiver dados, retorna o valor.
         if res and res[0]['dias_defasagem'] is not None:
             return float(res[0]['dias_defasagem'])
         return 0.0
 
     def get_comparativo_financeiro(self):
         """
-        Gráfico 1: Valor Recebido (Entrada) vs Valor Retornado (Procedente + Ressarcimento).
+        Gera dados para o gráfico comparativo: Entrada (Recebido) vs Saída (Garantia Paga).
+        Utiliza CTEs para segregar as datas de 'Lançamento' das datas de 'Análise'.
         """
         sql = """
             WITH meses AS (
@@ -51,13 +60,13 @@ class DashboardModel:
                 ORDER BY mes ASC LIMIT 6
             ),
             recebido AS (
-                -- Soma do valor das peças que entraram (baseado no lançamento)
+                -- Totaliza o valor das peças que entraram na fábrica (Data Lançamento)
                 SELECT TO_CHAR(n.data_lancamento, 'YYYY-MM') as mes, SUM(i.valor_item) as total
                 FROM itens_notas i JOIN notas_fiscais n ON i.id_nota_fiscal = n.id
                 GROUP BY mes
             ),
             retornado AS (
-                -- Soma do custo total pago (Procedente) baseado na data da ANÁLISE
+                -- Totaliza o custo pago (Peça + Ressarcimento) na data efetiva da ANÁLISE
                 SELECT TO_CHAR(i.data_analise, 'YYYY-MM') as mes, SUM(i.valor_item + i.ressarcimento) as total
                 FROM itens_notas i
                 WHERE i.procedente_improcedente = 'Procedente'
@@ -75,7 +84,7 @@ class DashboardModel:
         return self.db.execute_query(sql, fetch=True)
 
     def get_status_geral(self):
-        """Gráfico 2: Rosca de Status (Pendente, Procedente, Improcedente)."""
+        """Retorna distribuição de status para gráfico de rosca (Pie Chart)."""
         sql = """
             SELECT
                 CASE
@@ -91,7 +100,7 @@ class DashboardModel:
         return self.db.execute_query(sql, fetch=True)
 
     def get_entrada_mensal(self):
-        """Gráfico 3: Qtd e Valor de itens recebidos por mês (Baseado em Lançamento)."""
+        """Retorna histórico de volume (Qtd) e financeiro (R$) de entradas por mês."""
         sql = """
             SELECT TO_CHAR(n.data_lancamento, 'YYYY-MM') as mes,
                    COUNT(*) as qtd,
@@ -105,7 +114,7 @@ class DashboardModel:
         return self.db.execute_query(sql, fetch=True)
 
     def get_evolucao_lead_time(self):
-        """Gráfico 4: Evolução do Lead Time (Gap Médio mensal)."""
+        """Calcula a média mensal de dias entre o Recebimento Físico e a Análise Técnica."""
         sql = """
             SELECT
                 TO_CHAR(i.data_analise, 'YYYY-MM') as mes,

@@ -2,6 +2,8 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 from contextlib import contextmanager
 
+# Configuração de Banco de Dados
+# TODO: Para produção, mover estas variáveis para variáveis de ambiente (.env)
 DB_CONFIG = {
     'dbname': 'cardex_db',
     'user': 'dev',
@@ -11,16 +13,35 @@ DB_CONFIG = {
 }
 
 class DatabaseConnection:
+    """
+    Gerencia a conexão com o banco de dados PostgreSQL.
+    Utiliza o padrão Context Manager para garantir o fechamento seguro das conexões.
+    """
+
     @contextmanager
     def get_connection(self):
+        """
+        Generator que fornece uma conexão segura com o banco.
+        Garante commit automático em caso de sucesso e rollback/close em falhas.
+        """
         conn = psycopg2.connect(**DB_CONFIG)
         try:
             yield conn
         finally:
             conn.close()
 
-    def execute_query(self, query, params=None, fetch=False):
-        """Executa query de forma segura e retorna dicts se fetch=True"""
+    def execute_query(self, query: str, params=None, fetch=False):
+        """
+        Executa uma query SQL de forma segura (prevenção contra SQL Injection via params).
+        
+        Args:
+            query (str): O comando SQL.
+            params (tuple, optional): Parâmetros para substituição na query.
+            fetch (bool): Se True, retorna os resultados (SELECT). Se False, apenas commita (INSERT/UPDATE).
+            
+        Returns:
+            list[dict] | None: Lista de dicionários se fetch=True.
+        """
         with self.get_connection() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cursor:
                 cursor.execute(query, params)
@@ -30,16 +51,18 @@ class DatabaseConnection:
 
     def setup_database(self):
         """
-        Cria as tabelas e garante que todas as colunas existam (Auto-Migration).
+        Executa a Auto-Migração do banco de dados.
+        Verifica se as tabelas existem e cria a estrutura necessária.
+        Também aplica patches de correção (alter table) se necessário.
         """
-        # 1. Criação das Tabelas (Estrutura Básica)
+        # Estrutura inicial das tabelas
         queries_creation = [
             '''CREATE TABLE IF NOT EXISTS clientes (
                 cnpj TEXT PRIMARY KEY,
                 cliente TEXT,
-                grupo TEXT, -- Tenta criar já com grupo
-                cidade TEXT, 
-                estado TEXT, 
+                grupo TEXT,
+                cidade TEXT,
+                estado TEXT,
                 regiao TEXT
             )''',
             '''CREATE TABLE IF NOT EXISTS itens (
@@ -67,7 +90,7 @@ class DatabaseConnection:
                 codigo_item TEXT,
                 valor_item REAL,
                 ressarcimento REAL,
-                saldo_financeiro REAL DEFAULT 0, -- Tenta criar já com saldo
+                saldo_financeiro REAL DEFAULT 0,
                 status TEXT DEFAULT 'Pendente',
                 codigo_analise TEXT,
                 data_analise DATE,
@@ -98,30 +121,23 @@ class DatabaseConnection:
             )'''
         ]
 
-        # 2. Garantia de Colunas (Para bancos antigos ou volumes persistentes)
-        # Se a tabela já existe mas sem a coluna, isso corrige na hora.
+        # Migrações para garantir consistência em bancos já existentes
         queries_migration = [
             "ALTER TABLE clientes ADD COLUMN IF NOT EXISTS grupo TEXT;",
             "ALTER TABLE itens_notas ADD COLUMN IF NOT EXISTS saldo_financeiro REAL DEFAULT 0;",
-            # Garante que os saldos não fiquem zerados em itens antigos
             "UPDATE itens_notas SET saldo_financeiro = valor_item WHERE saldo_financeiro = 0 AND valor_item > 0;"
         ]
 
         try:
             with self.get_connection() as conn:
                 with conn.cursor() as cursor:
-                    # Executa Criação
                     for q in queries_creation:
                         cursor.execute(q)
-                    
-                    # Executa Migração/Correção
                     for q in queries_migration:
                         cursor.execute(q)
-                        
                 conn.commit()
-            print("Banco de dados verificado e atualizado com sucesso.")
+            print("Database setup completed successfully.")
             return True  
-            
         except Exception as e:
-            print(f"Erro ao configurar banco: {e}")
+            print(f"Database setup failed: {e}")
             return False

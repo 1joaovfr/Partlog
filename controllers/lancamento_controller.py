@@ -2,33 +2,40 @@ from models import LancamentoModel
 from dtos.lancamento_dto import NotaFiscalDTO, ItemNotaDTO
 
 class LancamentoController:
+    """
+    Controlador responsável pelo fluxo de entrada de Notas Fiscais.
+    Coordena validações de cadastro e conversão de dados da View para o Model.
+    """
     def __init__(self):
         self.model = LancamentoModel()
 
-    def buscar_cliente_por_cnpj(self, cnpj_sujo):
-        # Limpeza básica continua aqui ou num helper utilitário
+    def buscar_cliente_por_cnpj(self, cnpj_sujo: str):
+        """Remove formatação do CNPJ e busca no banco."""
         cnpj = ''.join(filter(str.isdigit, cnpj_sujo))
         return self.model.buscar_cliente_nome(cnpj)
-    
-    def buscar_produto_por_codigo(self, codigo):
+   
+    def buscar_produto_por_codigo(self, codigo: str):
         return self.model.existe_produto(codigo)
 
     def salvar_nota_entrada(self, dados_nota: dict, lista_itens: list):
         """
-        Recebe dicionários da View, converte para DTOs e chama o Model.
+        Processa a gravação da nota fiscal de entrada.
+        
+        Raises:
+            Exception: Se o CNPJ não estiver cadastrado no sistema.
         """
-        # 1. Preparação e Limpeza
+        # Sanitização
         cnpj_limpo = ''.join(filter(str.isdigit, dados_nota['cnpj']))
         
-        # 2. Validação de Regra de Negócio (Antes de tentar salvar)
+        # Validação de Regra de Negócio
         if not self.model.buscar_cliente_nome(cnpj_limpo):
-            raise Exception(f"Erro de Validação:\n\nO CNPJ {dados_nota['cnpj']} não está cadastrado.")
+            raise Exception(f"Erro de Validação: O CNPJ {dados_nota['cnpj']} não está cadastrado.")
 
-        # 3. Conversão para DTO (Data Transfer Object)
+        # Conversão para DTOs
         nota_dto = NotaFiscalDTO(
             numero=dados_nota['numero'],
             emissao=dados_nota['emissao'],
-            recebimento=dados_nota['recebimento'], # Já vem como objeto date da View
+            recebimento=dados_nota['recebimento'],
             cnpj_cliente=cnpj_limpo
         )
 
@@ -41,6 +48,5 @@ class LancamentoController:
                 ressarcimento=float(item['ressarcimento'])
             ))
 
-        # 4. Chama o Model para persistir
         self.model.salvar_entrada_completa(nota_dto, itens_dtos)
         return True
