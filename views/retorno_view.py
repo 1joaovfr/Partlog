@@ -6,6 +6,7 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineE
 from PySide6.QtCore import Qt, QDate
 from PySide6.QtGui import QColor
 
+# Mantendo seus imports originais
 from controllers.retorno_controller import RetornoController
 from dtos.retorno_dto import RetornoHeaderDTO, ItemPendenteDTO
 from styles.common import get_date_edit_style
@@ -18,6 +19,7 @@ class PageRetorno(QWidget):
         self.controller = RetornoController()
         self.itens_carregados: list[ItemPendenteDTO] = []
         
+        # Aplica o estilo recebido do arquivo styles
         self.setStyleSheet(RETORNO_STYLES + get_date_edit_style())
         self.init_ui()
 
@@ -26,17 +28,20 @@ class PageRetorno(QWidget):
         layout.setSpacing(15)
         layout.setContentsMargins(20, 20, 20, 20)
 
-        # 1. Topo
+        # 1. Topo (Dados da Nota)
         self.setup_header(layout)
 
-        # 2. Filtros
+        # 2. Filtros Dinâmicos (Aqui está a mudança de layout solicitada)
         self.setup_filters(layout)
 
-        # 3. Área Conteúdo (Tabela Separada + Resumo Separado)
+        # 3. Área Conteúdo (Tabela e Resumo)
         self.setup_content_area(layout)
 
+        # Garante que a tela inicie com a visibilidade correta dos filtros
+        self.atualizar_visibilidade_filtros()
+
     def setup_header(self, parent_layout):
-        frame = QFrame(objectName="FormCard") # Padronizado como FormCard
+        frame = QFrame(objectName="FormCard")
         vbox = QVBoxLayout(frame)
         
         vbox.addWidget(QLabel("DADOS DA NOTA DE RETORNO", objectName="SectionTitle"))
@@ -44,8 +49,9 @@ class PageRetorno(QWidget):
         hbox = QHBoxLayout()
         
         self.combo_tipo = QComboBox()
-        self.combo_tipo.addItems(["Garantia Comum", "Tratativa de Crédito", "Itens de Giro"])
-        self.combo_tipo.currentIndexChanged.connect(self.ao_mudar_tipo_retorno)
+        self.combo_tipo.addItems(["Garantia Simples", "Tratativa de Crédito", "Itens de Giro"])
+        # Conecta a mudança do combo à função que esconde/mostra campos
+        self.combo_tipo.currentIndexChanged.connect(self.atualizar_visibilidade_filtros)
         
         self.txt_num_nota = QLineEdit(placeholderText="Nº Nota Retorno")
         self.date_emissao = QDateEdit(calendarPopup=True, date=QDate.currentDate())
@@ -64,55 +70,73 @@ class PageRetorno(QWidget):
         vbox.addLayout(hbox)
         parent_layout.addWidget(frame)
 
-    def add_field(self, layout, label_text, widget, stretch=0):
-        v = QVBoxLayout()
-        v.setSpacing(2)
-        v.addWidget(QLabel(label_text))
-        v.addWidget(widget)
-        layout.addLayout(v, stretch)
-
     def setup_filters(self, parent_layout):
         frame = QFrame(objectName="FormCard")
-        hbox = QHBoxLayout(frame)
-        hbox.setContentsMargins(15, 15, 15, 15)
+        self.layout_filtros_wrapper = QHBoxLayout(frame)
+        self.layout_filtros_wrapper.setContentsMargins(15, 15, 15, 15)
+        
+        # --- CONTAINER 1: Filtros Padrão (Garantia/Crédito) ---
+        self.container_padrao = QWidget()
+        layout_padrao = QHBoxLayout(self.container_padrao)
+        layout_padrao.setContentsMargins(0, 0, 0, 0)
+        
+        self.txt_cnpj_padrao = QLineEdit(placeholderText="CNPJ do Cliente")
+        self.txt_nf_garantia = QLineEdit(placeholderText="Nº Nota(s) de Garantia")
+        
+        self.add_field(layout_padrao, "CNPJ do Cliente:", self.txt_cnpj_padrao, 1)
+        self.add_field(layout_padrao, "Notas de Garantia (Origem):", self.txt_nf_garantia, 1)
+        
+        # --- CONTAINER 2: Filtros de Giro (Radio Buttons) ---
+        self.container_giro = QWidget()
+        layout_giro = QHBoxLayout(self.container_giro)
+        layout_giro.setContentsMargins(0, 0, 0, 0)
         
         self.group_modo = QButtonGroup(self)
         self.rb_grupo = QRadioButton("Por Grupo Econômico")
-        self.rb_nota = QRadioButton("Por Nota Fiscal (CNPJ + NF)")
+        self.rb_nota = QRadioButton("Por CNPJ (Nota Fiscal)")
         self.rb_grupo.setCursor(Qt.PointingHandCursor)
         self.rb_nota.setCursor(Qt.PointingHandCursor)
         self.group_modo.addButton(self.rb_grupo)
         self.group_modo.addButton(self.rb_nota)
+        self.rb_grupo.setChecked(True)
         
-        self.rb_grupo.toggled.connect(self.toggle_input_filters)
-        
-        self.txt_termo = QLineEdit()
-        self.txt_nf_filtro = QLineEdit(placeholderText="Nº NF Original")
-        
-        self.txt_termo.returnPressed.connect(self.buscar)
-        self.txt_nf_filtro.returnPressed.connect(self.buscar)
+        # Input único para Giro (muda placeholder conforme radio)
+        self.txt_termo_giro = QLineEdit()
+        self.rb_grupo.toggled.connect(lambda: self.txt_termo_giro.setPlaceholderText("Nome do Grupo") if self.rb_grupo.isChecked() else self.txt_termo_giro.setPlaceholderText("CNPJ do Cliente"))
+        self.txt_termo_giro.setPlaceholderText("Nome do Grupo") # Inicial
 
+        layout_radios = QVBoxLayout()
+        layout_radios.addWidget(self.rb_grupo)
+        layout_radios.addWidget(self.rb_nota)
+        
+        layout_giro.addLayout(layout_radios)
+        self.add_field(layout_giro, "Termo de Busca:", self.txt_termo_giro, 2)
+
+        # --- BOTÃO BUSCAR (Comum) ---
+        # Usamos um container vertical para alinhar o botão com a base dos inputs
+        vbox_btn = QVBoxLayout()
+        vbox_btn.addStretch()
         btn_buscar = QPushButton(" BUSCAR PENDÊNCIAS", objectName="btn_primary")
         btn_buscar.setCursor(Qt.PointingHandCursor)
+        btn_buscar.setFixedHeight(34) # Altura para alinhar com inputs
         btn_buscar.clicked.connect(self.buscar)
+        vbox_btn.addWidget(btn_buscar)
 
-        hbox.addWidget(self.rb_grupo)
-        hbox.addWidget(self.rb_nota)
-        hbox.addSpacing(20)
-        hbox.addWidget(self.txt_termo, 2)
-        hbox.addWidget(self.txt_nf_filtro, 1)
-        hbox.addWidget(btn_buscar)
+        # Adiciona containers ao layout principal do frame
+        self.layout_filtros_wrapper.addWidget(self.container_padrao, stretch=4)
+        self.layout_filtros_wrapper.addWidget(self.container_giro, stretch=4)
+        self.layout_filtros_wrapper.addSpacing(15)
+        self.layout_filtros_wrapper.addLayout(vbox_btn, stretch=1)
         
         parent_layout.addWidget(frame)
-        self.ao_mudar_tipo_retorno() 
 
     def setup_content_area(self, parent_layout):
-        # Layout Horizontal para separar os dois Cards
+        # Layout Horizontal para separar Tabela e Resumo
         hbox_main = QHBoxLayout()
-        hbox_main.setSpacing(15) # Espaço entre Tabela e Resumo
+        hbox_main.setSpacing(15)
         hbox_main.setContentsMargins(0, 0, 0, 0)
 
-        # --- CARD 1: TABELA (Estilo solicitado) ---
+        # --- CARD ESQUERDA: TABELA ---
         card_tabela = QFrame(objectName="FormCard")
         layout_tabela = QVBoxLayout(card_tabela)
         
@@ -125,28 +149,26 @@ class PageRetorno(QWidget):
         self.table.setColumnCount(len(colunas))
         self.table.setHorizontalHeaderLabels(colunas)
         
-        # Configurações do seu snippet
         self.table.verticalHeader().setVisible(False)
         self.table.setAlternatingRowColors(True)
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
-        self.table.setEditTriggers(QTableWidget.NoEditTriggers) # Edição via clique ou código apenas
-        self.table.setShowGrid(True) # Grid visível como pedido
+        self.table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.table.setShowGrid(True)
         self.table.setFrameShape(QFrame.NoFrame)
         
-        # Cabeçalhos
         header = self.table.horizontalHeader()
         header.setSectionResizeMode(QHeaderView.Stretch)
         self.table.setColumnWidth(0, 50) 
-        header.setSectionResizeMode(0, QHeaderView.Fixed) # Checkbox fixo
+        header.setSectionResizeMode(0, QHeaderView.Fixed)
         
         self.table.itemChanged.connect(self.on_table_change)
         
         layout_tabela.addWidget(self.table)
         hbox_main.addWidget(card_tabela, stretch=1)
 
-        # --- CARD 2: RESUMO (Menor e separado) ---
+        # --- CARD DIREITA: RESUMO ---
         self.panel_resumo = QFrame(objectName="FormCard")
-        self.panel_resumo.setFixedWidth(260) # Largura reduzida
+        self.panel_resumo.setFixedWidth(260)
         
         vbox_res = QVBoxLayout(self.panel_resumo)
         vbox_res.setContentsMargins(15, 20, 15, 20)
@@ -178,6 +200,16 @@ class PageRetorno(QWidget):
         
         parent_layout.addLayout(hbox_main, stretch=1)
 
+    # --- MÉTODOS AUXILIARES UI ---
+    def add_field(self, layout, label_text, widget, stretch=0):
+        v = QVBoxLayout()
+        v.setSpacing(2)
+        lbl = QLabel(label_text)
+        # Pequeno ajuste CSS inline se necessário, ou use styles
+        v.addWidget(lbl)
+        v.addWidget(widget)
+        layout.addLayout(v, stretch)
+
     def add_resumo_row(self, layout, titulo, cor):
         wid = QWidget()
         h = QHBoxLayout(wid)
@@ -193,28 +225,49 @@ class PageRetorno(QWidget):
         layout.addWidget(wid)
         return val
 
-    # --- LÓGICA (Mantida) ---
-    def ao_mudar_tipo_retorno(self):
+    # --- LÓGICA DE INTERFACE (VISIBILIDADE) ---
+    def atualizar_visibilidade_filtros(self):
         tipo = self.combo_tipo.currentText()
+        
         if tipo == "Itens de Giro":
-            self.rb_grupo.setEnabled(True); self.rb_grupo.setChecked(True)
+            # Esconde inputs padrão, Mostra inputs de Giro
+            self.container_padrao.setVisible(False)
+            self.container_giro.setVisible(True)
         else:
-            self.rb_grupo.setEnabled(False); self.rb_nota.setChecked(True)
-        self.toggle_input_filters()
+            # Mostra inputs padrão, Esconde inputs de Giro
+            self.container_padrao.setVisible(True)
+            self.container_giro.setVisible(False)
 
-    def toggle_input_filters(self):
-        if self.rb_grupo.isChecked():
-            self.txt_termo.setPlaceholderText("Nome do Grupo Econômico")
-            self.txt_nf_filtro.setVisible(False)
-        else:
-            self.txt_termo.setPlaceholderText("CNPJ do Cliente")
-            self.txt_nf_filtro.setVisible(True)
-
+    # --- LÓGICA DE NEGÓCIO DA VIEW ---
     def buscar(self):
-        termo = self.txt_termo.text()
-        nf = self.txt_nf_filtro.text() if self.rb_nota.isChecked() else None
-        modo = "GRUPO" if self.rb_grupo.isChecked() else "CNPJ"
-        self.itens_carregados = self.controller.buscar_pendencias(termo, modo, nf)
+        # Define quais variáveis pegar baseado no que está visível
+        tipo = self.combo_tipo.currentText()
+        
+        termo = ""
+        modo = "CNPJ"
+        nf_filtro = None
+
+        if tipo == "Itens de Giro":
+            termo = self.txt_termo_giro.text()
+            if self.rb_grupo.isChecked():
+                modo = "GRUPO"
+            else:
+                modo = "CNPJ"
+        else:
+            # Garantia ou Crédito
+            termo = self.txt_cnpj_padrao.text()
+            nf_input = self.txt_nf_garantia.text()
+            if nf_input:
+                nf_filtro = nf_input
+            modo = "CNPJ"
+
+        # Validação simples antes de chamar controller
+        if not termo:
+            QMessageBox.warning(self, "Atenção", "Preencha o campo de busca (CNPJ ou Grupo).")
+            return
+
+        # Chama o controller original sem modificação
+        self.itens_carregados = self.controller.buscar_pendencias(termo, modo, nf_filtro)
         self.popular_tabela()
 
     def popular_tabela(self):
@@ -230,10 +283,15 @@ class PageRetorno(QWidget):
             self.table.setItem(i, 0, chk)
             
             def c(t): 
-                it = QTableWidgetItem(t); it.setTextAlignment(Qt.AlignCenter); return it
+                it = QTableWidgetItem(str(t)) # str() para segurança
+                it.setTextAlignment(Qt.AlignCenter)
+                return it
             
             self.table.setItem(i, 1, c(dto.numero_nota_origem))
-            self.table.setItem(i, 2, c(dto.data_nota_origem.strftime("%d/%m/%Y")))
+            # Tratamento caso data seja None ou string
+            data_str = dto.data_nota_origem.strftime("%d/%m/%Y") if hasattr(dto.data_nota_origem, 'strftime') else str(dto.data_nota_origem)
+            self.table.setItem(i, 2, c(data_str))
+            
             self.table.setItem(i, 3, c(dto.codigo_item))
             self.table.setItem(i, 4, c(dto.nome_cliente))
             
@@ -262,7 +320,9 @@ class PageRetorno(QWidget):
                 try:
                     val = float(self.table.item(r, 6).text().replace(",", "."))
                     total_sel += val
-                    dto = chk.data(Qt.UserRole); dto.valor_a_abater = val; dto.selecionado = True
+                    dto = chk.data(Qt.UserRole)
+                    dto.valor_a_abater = val
+                    dto.selecionado = True
                 except: pass
             else:
                 chk.data(Qt.UserRole).selecionado = False
@@ -301,13 +361,25 @@ class PageRetorno(QWidget):
             if chk.checkState() == Qt.Checked:
                 itens.append(chk.data(Qt.UserRole))
         
+        # Determina o CNPJ e o Grupo com base na seleção
+        cnpj_final = None
+        grupo_final = None
+        
+        if self.combo_tipo.currentText() == "Itens de Giro":
+            if self.rb_grupo.isChecked():
+                grupo_final = self.txt_termo_giro.text()
+            else:
+                cnpj_final = self.txt_termo_giro.text()
+        else:
+            cnpj_final = self.txt_cnpj_padrao.text()
+
         header = RetornoHeaderDTO(
             numero_nota=self.txt_num_nota.text(),
             data_emissao=self.date_emissao.date().toString("yyyy-MM-dd"),
             tipo_retorno=self.combo_tipo.currentText(),
             valor_total=self.spin_valor_retorno.value(),
-            cnpj=self.txt_termo.text() if not self.rb_grupo.isChecked() else None,
-            grupo=self.txt_termo.text() if self.rb_grupo.isChecked() else None
+            cnpj=cnpj_final,
+            grupo=grupo_final
         )
         
         ok, msg = self.controller.salvar_processo(header, itens)
@@ -318,8 +390,9 @@ class PageRetorno(QWidget):
             QMessageBox.warning(self, "Erro", msg)
 
     def resetar_tela(self):
-        self.txt_termo.clear()
-        self.txt_nf_filtro.clear()
+        self.txt_cnpj_padrao.clear()
+        self.txt_nf_garantia.clear()
+        self.txt_termo_giro.clear()
         self.txt_num_nota.clear()
         self.spin_valor_retorno.setValue(0)
         self.table.setRowCount(0)

@@ -158,11 +158,11 @@ class DatabaseSeeder:
                             continue
 
                         # LOOP ITENS (10 a 15 por nota)
-                        qtd_itens = random.randint(10, 15) 
+                        qtd_itens = random.randint(5, 10) 
                         
                         for _ in range(qtd_itens):
                             cod_prod = random.choice(lista_produtos)
-                            valor = round(random.uniform(1000.00, 5000.00), 2)
+                            valor = round(random.uniform(100.00, 1500.00), 2)
                             
                             # --- REGRA 2: GERA O CÓDIGO DE ANÁLISE SEMPRE ---
                             # O código nasce junto com o cadastro do item, independente do status
