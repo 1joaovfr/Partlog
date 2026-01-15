@@ -43,45 +43,38 @@ class DashboardModel:
 
     def get_comparativo_financeiro(self):
         """
-        Gera dados para o gráfico comparativo: Entrada (Recebido) vs Saída (Garantia Paga).
-        
-        LÓGICA AJUSTADA:
-        - Recebido: Baseado na data de LANÇAMENTO da nota de entrada.
-        - Retornado: Baseado na tabela CONCILIAÇÃO (itens efetivamente abatidos/pagos via Nota de Retorno).
-          Usa a data de EMISSÃO da Nota de Retorno.
+        Gera dados para o gráfico comparativo: Entrada vs Devolução.
+        Lógica de Safra (Últimos 6 meses de RECEBIMENTO).
         """
         sql = """
-            WITH meses_entrada AS (
-                SELECT DISTINCT TO_CHAR(data_lancamento, 'YYYY-MM') as mes
+            WITH meses AS (
+                -- Busca os últimos 6 meses de ENTRADA
+                SELECT DISTINCT TO_CHAR(data_recebimento, 'YYYY-MM') as mes
                 FROM notas_fiscais
-            ),
-            meses_saida AS (
-                SELECT DISTINCT TO_CHAR(data_emissao, 'YYYY-MM') as mes
-                FROM notas_retorno
-            ),
-            todos_meses AS (
-                SELECT mes FROM meses_entrada
-                UNION 
-                SELECT mes FROM meses_saida
+                WHERE data_recebimento IS NOT NULL
                 ORDER BY mes DESC 
                 LIMIT 6
             ),
             meses_final AS (
-                SELECT mes FROM todos_meses ORDER BY mes ASC
+                SELECT mes FROM meses ORDER BY mes ASC
             ),
             recebido AS (
-                -- Totaliza o valor das peças que entraram (Data Lançamento)
-                SELECT TO_CHAR(n.data_lancamento, 'YYYY-MM') as mes, SUM(i.valor_item) as total
-                FROM itens_notas i JOIN notas_fiscais n ON i.id_nota_fiscal = n.id
+                SELECT 
+                    TO_CHAR(n.data_recebimento, 'YYYY-MM') as mes, 
+                    SUM(i.valor_item) as total
+                FROM itens_notas i 
+                JOIN notas_fiscais n ON i.id_nota_fiscal = n.id
+                WHERE n.data_recebimento IS NOT NULL
                 GROUP BY mes
             ),
-            retornado AS (
-                -- Totaliza apenas o que tem vínculo na tabela CONCILIACAO (efetivamente pago)
+            retornado_por_safra AS (
                 SELECT 
-                    TO_CHAR(nr.data_emissao, 'YYYY-MM') as mes, 
-                    SUM(c.valor_abatido) as total
-                FROM conciliacao c
-                JOIN notas_retorno nr ON c.id_nota_retorno = nr.id
+                    TO_CHAR(n.data_recebimento, 'YYYY-MM') as mes, 
+                    SUM(i.valor_item) as total
+                FROM itens_notas i
+                JOIN notas_fiscais n ON i.id_nota_fiscal = n.id
+                JOIN conciliacao c ON i.id = c.id_item_entrada
+                WHERE n.data_recebimento IS NOT NULL
                 GROUP BY mes
             )
             SELECT
@@ -90,7 +83,7 @@ class DashboardModel:
                 COALESCE(p.total, 0) as val_retornado
             FROM meses_final m
             LEFT JOIN recebido r ON m.mes = r.mes
-            LEFT JOIN retornado p ON m.mes = p.mes
+            LEFT JOIN retornado_por_safra p ON m.mes = p.mes
             ORDER BY m.mes ASC
         """
         return self.db.execute_query(sql, fetch=True)
@@ -111,48 +104,38 @@ class DashboardModel:
         """
         return self.db.execute_query(sql, fetch=True)
 
-    # --- NOVOS MÉTODOS PARA O FILTRO INDEPENDENTE (BACKLOG) ---
-
-    def get_meses_com_pendencia_analise(self):
+    def get_historico_retornos_mes(self):
         """
-        Busca os meses de entrada (Lançamento) que possuem itens 
-        ainda sem análise técnica realizada (data_analise IS NULL).
+        Retorna o valor total dos itens retornados agrupados pelo Mês de Emissão da Nota de Retorno.
+        Filtra pelos últimos 6 meses disponíveis (Lógica corrigida: DESC -> ASC).
         """
         sql = """
-            SELECT DISTINCT 
-                TO_CHAR(n.data_lancamento, 'MM/YYYY') as mes_formatado,
-                TO_CHAR(n.data_lancamento, 'YYYY-MM') as mes_sort
-            FROM itens_notas i
-            JOIN notas_fiscais n ON i.id_nota_fiscal = n.id
-            WHERE i.data_analise IS NULL 
-            ORDER BY mes_sort DESC
+            WITH meses AS (
+                -- 1. Busca apenas os meses que existem na tabela de notas de retorno
+                SELECT DISTINCT TO_CHAR(data_emissao, 'YYYY-MM') as mes
+                FROM notas_retorno
+                ORDER BY mes DESC -- Garante que pegamos os ÚLTIMOS (mais recentes)
+                LIMIT 6
+            ),
+            meses_final AS (
+                -- 2. Reordena para exibir cronologicamente (crescente)
+                SELECT mes FROM meses ORDER BY mes ASC
+            ),
+            dados AS (
+                -- 3. Agrega os valores por mês
+                SELECT 
+                    TO_CHAR(nr.data_emissao, 'YYYY-MM') as mes,
+                    SUM(i.valor_item) as valor_total
+                FROM itens_notas i
+                JOIN conciliacao c ON i.id = c.id_item_entrada
+                JOIN notas_retorno nr ON c.id_nota_retorno = nr.id
+                GROUP BY mes
+            )
+            SELECT 
+                m.mes,
+                COALESCE(d.valor_total, 0) as valor_total
+            FROM meses_final m
+            LEFT JOIN dados d ON m.mes = d.mes
+            ORDER BY m.mes ASC
         """
         return self.db.execute_query(sql, fetch=True)
-
-    def get_kpi_backlog_analise(self, mes_ano_filtro=None):
-        """
-        Calcula Qtd e Valor SOMENTE DO RESSARCIMENTO dos itens 
-        que estão aguardando análise.
-        """
-        # AJUSTE: Soma APENAS a coluna 'ressarcimento'.
-        # Ignora o 'valor_item' (preço da peça).
-        sql = """
-            SELECT 
-                COUNT(*) as qtd,
-                COALESCE(SUM(i.ressarcimento), 0) as total
-            FROM itens_notas i
-            JOIN notas_fiscais n ON i.id_nota_fiscal = n.id
-            WHERE i.data_analise IS NULL
-        """
-        
-        params = []
-        if mes_ano_filtro and mes_ano_filtro != "Todos":
-            # Filtra pela data de chegada (Lançamento da Nota)
-            sql += " AND TO_CHAR(n.data_lancamento, 'MM/YYYY') = %s"
-            params.append(mes_ano_filtro)
-            
-        res = self.db.execute_query(sql, params=tuple(params), fetch=True)
-        
-        if res:
-            return {'qtd': int(res[0]['qtd']), 'total': float(res[0]['total'])}
-        return {'qtd': 0, 'total': 0.0}

@@ -46,7 +46,7 @@ class RelatorioModel:
         return [RelatorioItemDTO.from_dict(d) for d in dados_brutos]
 
     def gerar_excel(self, caminho, data_inicio, data_fim):
-        """Exporta para Excel respeitando a ordem exata solicitada."""
+        """Exporta para Excel recuperando os dados de notas de retorno."""
         sql = """
             SELECT 
                 to_char(n.data_lancamento, 'DD/MM/YYYY') as "Lançamento",
@@ -69,14 +69,22 @@ class RelatorioModel:
                 a.descricao_avaria as "Desc. Avaria", 
                 l.valor_item as "Valor", 
                 l.ressarcimento as "Ressarcimento",
-                NULL as "Retorno",
-                NULL as "Nota Fiscal (Retorno)",
-                NULL as "Desc. Retorno"
+                
+                -- DADOS DA NOTA DE RETORNO (Alterado de NULL para as colunas reais)
+                to_char(nr.data_emissao, 'DD/MM/YYYY') as "Retorno",
+                nr.numero_nota as "Nota Fiscal (Retorno)",
+                nr.tipo_retorno as "Desc. Retorno"
+
             FROM itens_notas l
             JOIN notas_fiscais n ON l.id_nota_fiscal = n.id
             LEFT JOIN clientes c ON n.cnpj_cliente = c.cnpj
             LEFT JOIN itens i ON l.codigo_item = i.codigo_item
             LEFT JOIN avarias a ON l.codigo_avaria = a.codigo_avaria
+            
+            -- NOVOS JOINS PARA BUSCAR O RETORNO
+            LEFT JOIN conciliacao conc ON l.id = conc.id_item_entrada
+            LEFT JOIN notas_retorno nr ON conc.id_nota_retorno = nr.id
+
             WHERE n.data_lancamento BETWEEN %s AND %s
             ORDER BY n.data_lancamento ASC
         """
