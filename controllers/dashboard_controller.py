@@ -4,17 +4,20 @@ from dtos.dashboard_dto import (
 )
 
 class DashboardController:
+    """
+    Orquestrador de dados para o Dashboard gerencial.
+    """
     def __init__(self):
         self.model = DashboardModel()
 
     def get_kpis(self) -> DashboardDTO:
+        # Busca dados brutos para os gráficos principais
         val_gap = self.model.get_gap_atual_recebimento()
         raw_fin = self.model.get_comparativo_financeiro()
         raw_status = self.model.get_status_geral()
-        
-        # Busca o novo dado
         raw_retornos = self.model.get_historico_retornos_mes()
 
+        # Serialização para DTOs
         list_fin = [
             ComparativoFinDTO(
                 mes=d['mes'],
@@ -23,12 +26,17 @@ class DashboardController:
             ) for d in raw_fin
         ]
 
+        # --- CORREÇÃO AQUI ---
+        # Adicionamos o campo 'valor' pegando de 'valor_total' da query
         list_status = [
-            StatusDTO(status=d['status_final'], qtd=int(d['qtd']))
+            StatusDTO(
+                status=d['status_final'], 
+                qtd=int(d['qtd']),
+                valor=float(d['valor_total']) 
+            )
             for d in raw_status
         ]
-        
-        # Mapeia o novo gráfico
+
         list_retornos = [
             RetornoMensalDTO(
                 mes=d['mes'],
@@ -39,6 +47,6 @@ class DashboardController:
         return DashboardDTO(
             comparativo_financeiro=list_fin,
             status_data=list_status,
-            historico_retornos=list_retornos, # Novo campo
+            historico_retornos=list_retornos,
             gap_cronologico=val_gap
         )

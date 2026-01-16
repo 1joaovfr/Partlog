@@ -89,7 +89,9 @@ class DashboardModel:
         return self.db.execute_query(sql, fetch=True)
 
     def get_status_geral(self):
-        """Retorna distribuição de status para gráfico de rosca."""
+        """
+        Retorna distribuição de status contendo Quantidade e Valor Financeiro.
+        """
         sql = """
             SELECT
                 CASE
@@ -98,7 +100,8 @@ class DashboardModel:
                     WHEN procedente_improcedente = 'Improcedente' THEN 'Improcedente'
                     ELSE status
                 END as status_final,
-                COUNT(*) as qtd
+                COUNT(*) as qtd,
+                SUM(valor_item) as valor_total
             FROM itens_notas
             GROUP BY status_final
         """

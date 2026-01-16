@@ -12,8 +12,7 @@ from styles.dashboard_styles import (
 )
 from styles.theme import (
     COLOR_DANGER, COLOR_SUCCESS, COLOR_WARNING, COLOR_TEXT_DIM,
-    CHART_BLUE_PRIMARY, CHART_NEON_BLUE, COLOR_CARD_BORDER, 
-    COLOR_TEXT
+    CHART_BLUE_PRIMARY, CHART_NEON_BLUE, COLOR_CARD_BORDER, COLOR_TEXT
 )
 
 class PlotlyWidget(QWebEngineView):
@@ -68,7 +67,7 @@ class PageDashboard(QWidget):
 
         kpis = self.controller.get_kpis()
         
-        # 1. Financeiro (Safra: Recebido vs Devolvido daquela safra)
+        # 1. Financeiro (Safra)
         fig1 = self.criar_grafico_financeiro(kpis.comparativo_financeiro)
         self.grid.addWidget(self.criar_card("Qualidade da Safra (Recebido x Devolvido)", fig1), 0, 0)
 
@@ -76,7 +75,7 @@ class PageDashboard(QWidget):
         fig2 = self.criar_grafico_status(kpis.status_data)
         self.grid.addWidget(self.criar_card("Distribuição de Status", fig2), 0, 1)
 
-        # 3. NOVO: Volume Financeiro de Retorno (Baseado na emissão da nota)
+        # 3. Volume Financeiro de Retorno
         fig3 = self.criar_grafico_retorno_mensal(kpis.historico_retornos)
         self.grid.addWidget(self.criar_card("Valor Retornado (Data Emissão NF)", fig3), 1, 0)
 
@@ -116,14 +115,37 @@ class PageDashboard(QWidget):
         ret = [d.valor_retornado for d in dados]
 
         fig = go.Figure()
-        fig.add_trace(go.Bar(x=meses, y=rec, name="Recebido (R$)", marker_color=CHART_BLUE_PRIMARY, opacity=0.7))
-        fig.add_trace(go.Scatter(x=meses, y=ret, name="Devolvido da Safra (R$)", line=dict(color=COLOR_DANGER, width=3), mode='lines+markers'))
+        
+        # Barra Azul (Recebido)
+        fig.add_trace(go.Bar(
+            x=meses, 
+            y=rec, 
+            name="Recebido (R$)", 
+            marker_color=CHART_BLUE_PRIMARY, 
+            opacity=0.6, # Leve transparência para destacar a linha
+            hovertemplate='Mês: %{x}<br>Recebido: R$ %{y:,.2f}<extra></extra>'
+        ))
+        
+        # Linha Neon/Ciano (Retornado) - Substituindo o Vermelho
+        fig.add_trace(go.Scatter(
+            x=meses, 
+            y=ret, 
+            name="Devolvido da Safra (R$)", 
+            # COR ALTERADA AQUI:
+            line=dict(color=CHART_NEON_BLUE, width=4), 
+            mode='lines+markers',
+            marker=dict(size=8, symbol='circle', color='white', line=dict(width=2, color=CHART_NEON_BLUE)),
+            hovertemplate='Mês: %{x}<br>Devolvido: R$ %{y:,.2f}<extra></extra>'
+        ))
+        
         fig.update_xaxes(type='category')
-        fig.update_layout(legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
+        fig.update_layout(
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+            separators=",." 
+        )
         return apply_chart_theme(fig)
 
     def criar_grafico_retorno_mensal(self, dados):
-        """Novo gráfico de barras simples para o retorno mensal"""
         if not dados: return None
         meses = [self.formatar_data_pt(d.mes) for d in dados]
         valores = [d.valor for d in dados]
@@ -133,26 +155,55 @@ class PageDashboard(QWidget):
             x=meses, 
             y=valores, 
             name="Total Retornado (R$)",
-            marker_color=COLOR_DANGER, # Vermelho pois é saída
-            opacity=0.8,
-            text=[f'R$ {v:,.0f}' for v in valores], # Exibe valor na barra
-            textposition='auto',
-            hovertemplate='Mês: %{x}<br>Total: R$ %{y:,.2f}'
+            # COR ALTERADA AQUI (Mesma da linha do outro gráfico):
+            marker_color=CHART_NEON_BLUE,
+            opacity=0.9,
+            hovertemplate='Mês: %{x}<br>Total: R$ %{y:,.2f}<extra></extra>'
         ))
         
         fig.update_xaxes(type='category')
-        fig.update_layout(showlegend=False) # Só tem uma série, não precisa de legenda
+        fig.update_layout(
+            showlegend=False,
+            separators=",." 
+        )
         return apply_chart_theme(fig)
 
     def criar_grafico_status(self, dados):
+        """Gráfico de Pizza com Valor R$ na fatia e Legenda Lateral"""
         if not dados: return None
+        
         labels = [d.status for d in dados]
-        values = [d.qtd for d in dados]
+        qtds = [d.qtd for d in dados]      
+        valores = [d.valor for d in dados] 
+        
         colors_map = {'Procedente': COLOR_DANGER, 'Improcedente': COLOR_SUCCESS, 'Pendente': COLOR_WARNING}
         colors = [colors_map.get(l, COLOR_TEXT_DIM) for l in labels]
 
-        fig = go.Figure(data=[go.Pie(labels=labels, values=values, hole=.5, marker=dict(colors=colors), textinfo='percent+label', textfont=dict(color='white'))])
-        fig.update_layout(legend=dict(orientation="h", yanchor="top", y=-0.1))
+        fig = go.Figure(data=[go.Pie(
+            labels=labels, 
+            values=valores, 
+            hole=.6, # Buraco um pouco maior para ficar elegante
+            marker=dict(colors=colors), 
+            
+            textinfo='percent', 
+            textfont=dict(color='white'),
+            
+            customdata=qtds,
+            hovertemplate='<b>%{label}</b><br>R$ %{value:,.2f}<br>Qtd: %{customdata}<extra></extra>'
+        )])
+
+        # Legenda posicionada à esquerda
+        fig.update_layout(
+            separators=",.", 
+            margin=dict(l=0, r=0, t=20, b=20),
+            legend=dict(
+                orientation="v",      
+                yanchor="middle",     
+                y=0.5, 
+                xanchor="left",       
+                x=-0.2                
+            )
+        )
         return apply_chart_theme(fig)
 
     def criar_grafico_defasagem(self, valor_dias):
@@ -170,9 +221,9 @@ class PageDashboard(QWidget):
                 'borderwidth': 2,
                 'bordercolor': COLOR_CARD_BORDER,
                 'steps': [
-                    {'range': [0, 3], 'color': "rgba(72, 187, 120, 0.2)"},
-                    {'range': [3, 7], 'color': "rgba(236, 201, 75, 0.2)"},
-                    {'range': [7, 20], 'color': "rgba(245, 101, 101, 0.2)"}
+                    {'range': [0, 3], 'color': "rgba(72, 187, 120, 0.2)"}, # Verde suave
+                    {'range': [3, 7], 'color': "rgba(236, 201, 75, 0.2)"},  # Amarelo suave
+                    {'range': [7, 20], 'color': "rgba(245, 101, 101, 0.2)"} # Vermelho suave
                 ],
                 'threshold': {'line': {'color': "white", 'width': 4}, 'thickness': 0.75, 'value': META}
             }
