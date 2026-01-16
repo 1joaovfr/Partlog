@@ -19,7 +19,6 @@ class PageRetorno(QWidget):
         self.controller = RetornoController()
         self.itens_carregados: list[ItemPendenteDTO] = []
         
-        # Aplica o estilo recebido do arquivo styles
         self.setStyleSheet(RETORNO_STYLES + get_date_edit_style())
         self.init_ui()
 
@@ -28,29 +27,22 @@ class PageRetorno(QWidget):
         layout.setSpacing(15)
         layout.setContentsMargins(20, 20, 20, 20)
 
-        # 1. Topo (Dados da Nota)
         self.setup_header(layout)
-
-        # 2. Filtros Dinâmicos (Aqui está a mudança de layout solicitada)
-        self.setup_filters(layout)
-
-        # 3. Área Conteúdo (Tabela e Resumo)
+        self.setup_filters(layout) # Alterado
         self.setup_content_area(layout)
 
-        # Garante que a tela inicie com a visibilidade correta dos filtros
+        # Garante o estado inicial correto
         self.atualizar_visibilidade_filtros()
 
     def setup_header(self, parent_layout):
+        # ... (O código do header permanece idêntico ao seu original) ...
         frame = QFrame(objectName="FormCard")
         vbox = QVBoxLayout(frame)
-        
         vbox.addWidget(QLabel("DADOS DA NOTA DE RETORNO", objectName="SectionTitle"))
         
         hbox = QHBoxLayout()
-        
         self.combo_tipo = QComboBox()
         self.combo_tipo.addItems(["Garantia Simples", "Tratativa de Crédito", "Itens de Giro"])
-        # Conecta a mudança do combo à função que esconde/mostra campos
         self.combo_tipo.currentIndexChanged.connect(self.atualizar_visibilidade_filtros)
         
         self.txt_num_nota = QLineEdit(placeholderText="Nº Nota Retorno")
@@ -71,11 +63,42 @@ class PageRetorno(QWidget):
         parent_layout.addWidget(frame)
 
     def setup_filters(self, parent_layout):
+        """
+        REFORMULADO: Separa os Radio Buttons dos Inputs para permitir
+        reutilizar o container padrão (CNPJ+NF) no modo Giro.
+        """
         frame = QFrame(objectName="FormCard")
+        # Layout principal horizontal
         self.layout_filtros_wrapper = QHBoxLayout(frame)
         self.layout_filtros_wrapper.setContentsMargins(15, 15, 15, 15)
         
-        # --- CONTAINER 1: Filtros Padrão (Garantia/Crédito) ---
+        # --- 1. CONTAINER DOS RADIO BUTTONS (Aparece só em Giro) ---
+        self.container_radios = QWidget()
+        layout_radios_wrapper = QVBoxLayout(self.container_radios)
+        layout_radios_wrapper.setContentsMargins(0, 0, 15, 0) # Margem direita para separar
+        
+        self.group_modo = QButtonGroup(self)
+        self.rb_grupo = QRadioButton("Por Grupo Econômico")
+        self.rb_nota = QRadioButton("Por CNPJ (Nota Fiscal)")
+        
+        self.rb_grupo.setCursor(Qt.PointingHandCursor)
+        self.rb_nota.setCursor(Qt.PointingHandCursor)
+        self.rb_grupo.setChecked(True) # Padrão
+        
+        self.group_modo.addButton(self.rb_grupo)
+        self.group_modo.addButton(self.rb_nota)
+        
+        # Conecta a mudança dos radios à visibilidade dos inputs
+        self.rb_grupo.toggled.connect(self.atualizar_visibilidade_filtros)
+        self.rb_nota.toggled.connect(self.atualizar_visibilidade_filtros)
+
+        layout_radios_wrapper.addWidget(QLabel("Modo de Busca:"))
+        layout_radios_wrapper.addWidget(self.rb_grupo)
+        layout_radios_wrapper.addWidget(self.rb_nota)
+        
+        # --- 2. CONTAINER DE INPUTS (Stack lógico) ---
+        
+        # A) Container PADRÃO (CNPJ + NF) - Usado em Garantia, Crédito e Giro(Por CNPJ)
         self.container_padrao = QWidget()
         layout_padrao = QHBoxLayout(self.container_padrao)
         layout_padrao.setContentsMargins(0, 0, 0, 0)
@@ -84,54 +107,37 @@ class PageRetorno(QWidget):
         self.txt_nf_garantia = QLineEdit(placeholderText="Nº Nota(s) de Garantia")
         
         self.add_field(layout_padrao, "CNPJ do Cliente:", self.txt_cnpj_padrao, 1)
-        self.add_field(layout_padrao, "Notas de Garantia (Origem):", self.txt_nf_garantia, 1)
+        self.add_field(layout_padrao, "Nota Fiscal (Opcional):", self.txt_nf_garantia, 1)
         
-        # --- CONTAINER 2: Filtros de Giro (Radio Buttons) ---
-        self.container_giro = QWidget()
-        layout_giro = QHBoxLayout(self.container_giro)
-        layout_giro.setContentsMargins(0, 0, 0, 0)
+        # B) Container GRUPO (Apenas input de texto simples) - Usado em Giro(Por Grupo)
+        self.container_input_grupo = QWidget()
+        layout_grupo = QHBoxLayout(self.container_input_grupo)
+        layout_grupo.setContentsMargins(0, 0, 0, 0)
         
-        self.group_modo = QButtonGroup(self)
-        self.rb_grupo = QRadioButton("Por Grupo Econômico")
-        self.rb_nota = QRadioButton("Por CNPJ (Nota Fiscal)")
-        self.rb_grupo.setCursor(Qt.PointingHandCursor)
-        self.rb_nota.setCursor(Qt.PointingHandCursor)
-        self.group_modo.addButton(self.rb_grupo)
-        self.group_modo.addButton(self.rb_nota)
-        self.rb_grupo.setChecked(True)
-        
-        # Input único para Giro (muda placeholder conforme radio)
-        self.txt_termo_giro = QLineEdit()
-        self.rb_grupo.toggled.connect(lambda: self.txt_termo_giro.setPlaceholderText("Nome do Grupo") if self.rb_grupo.isChecked() else self.txt_termo_giro.setPlaceholderText("CNPJ do Cliente"))
-        self.txt_termo_giro.setPlaceholderText("Nome do Grupo") # Inicial
+        self.txt_termo_grupo = QLineEdit(placeholderText="Digite o nome do Grupo Econômico")
+        self.add_field(layout_grupo, "Nome do Grupo:", self.txt_termo_grupo, 1)
 
-        layout_radios = QVBoxLayout()
-        layout_radios.addWidget(self.rb_grupo)
-        layout_radios.addWidget(self.rb_nota)
-        
-        layout_giro.addLayout(layout_radios)
-        self.add_field(layout_giro, "Termo de Busca:", self.txt_termo_giro, 2)
-
-        # --- BOTÃO BUSCAR (Comum) ---
-        # Usamos um container vertical para alinhar o botão com a base dos inputs
+        # --- 3. BOTÃO BUSCAR ---
         vbox_btn = QVBoxLayout()
         vbox_btn.addStretch()
         btn_buscar = QPushButton(" BUSCAR PENDÊNCIAS", objectName="btn_primary")
         btn_buscar.setCursor(Qt.PointingHandCursor)
-        btn_buscar.setFixedHeight(34) # Altura para alinhar com inputs
+        btn_buscar.setFixedHeight(34)
         btn_buscar.clicked.connect(self.buscar)
         vbox_btn.addWidget(btn_buscar)
 
-        # Adiciona containers ao layout principal do frame
+        # ADICIONANDO TUDO AO LAYOUT
+        # Ordem: Radios (se visivel) -> Inputs (Padrao ou Grupo) -> Botão
+        self.layout_filtros_wrapper.addWidget(self.container_radios, stretch=0)
         self.layout_filtros_wrapper.addWidget(self.container_padrao, stretch=4)
-        self.layout_filtros_wrapper.addWidget(self.container_giro, stretch=4)
+        self.layout_filtros_wrapper.addWidget(self.container_input_grupo, stretch=4)
         self.layout_filtros_wrapper.addSpacing(15)
         self.layout_filtros_wrapper.addLayout(vbox_btn, stretch=1)
         
         parent_layout.addWidget(frame)
 
     def setup_content_area(self, parent_layout):
-        # Layout Horizontal para separar Tabela e Resumo
+        # ... (O código da tabela e resumo permanece idêntico ao seu original) ...
         hbox_main = QHBoxLayout()
         hbox_main.setSpacing(15)
         hbox_main.setContentsMargins(0, 0, 0, 0)
@@ -197,15 +203,12 @@ class PageRetorno(QWidget):
         vbox_res.addWidget(self.btn_confirmar)
         
         hbox_main.addWidget(self.panel_resumo)
-        
         parent_layout.addLayout(hbox_main, stretch=1)
 
-    # --- MÉTODOS AUXILIARES UI ---
     def add_field(self, layout, label_text, widget, stretch=0):
         v = QVBoxLayout()
         v.setSpacing(2)
         lbl = QLabel(label_text)
-        # Pequeno ajuste CSS inline se necessário, ou use styles
         v.addWidget(lbl)
         v.addWidget(widget)
         layout.addLayout(v, stretch)
@@ -225,52 +228,72 @@ class PageRetorno(QWidget):
         layout.addWidget(wid)
         return val
 
-    # --- LÓGICA DE INTERFACE (VISIBILIDADE) ---
+    # --- LÓGICA DE INTERFACE REFORMULADA ---
     def atualizar_visibilidade_filtros(self):
-        tipo = self.combo_tipo.currentText()
+        tipo_selecionado = self.combo_tipo.currentText()
+        is_giro = (tipo_selecionado == "Itens de Giro")
         
-        if tipo == "Itens de Giro":
-            # Esconde inputs padrão, Mostra inputs de Giro
-            self.container_padrao.setVisible(False)
-            self.container_giro.setVisible(True)
+        # 1. Visibilidade dos Radio Buttons
+        self.container_radios.setVisible(is_giro)
+        
+        # 2. Lógica para mostrar qual container de Input usar
+        if is_giro:
+            # Dentro de Giro, olhamos os Radios
+            if self.rb_grupo.isChecked():
+                # Giro -> Por Grupo
+                self.container_padrao.setVisible(False)
+                self.container_input_grupo.setVisible(True)
+            else:
+                # Giro -> Por CNPJ (Aqui reutilizamos o container padrão!)
+                self.container_padrao.setVisible(True)
+                self.container_input_grupo.setVisible(False)
         else:
-            # Mostra inputs padrão, Esconde inputs de Giro
+            # Garantia ou Crédito -> Sempre usa CNPJ+NF
             self.container_padrao.setVisible(True)
-            self.container_giro.setVisible(False)
+            self.container_input_grupo.setVisible(False)
 
-    # --- LÓGICA DE NEGÓCIO DA VIEW ---
+    # --- LÓGICA DE NEGÓCIO REFORMULADA ---
     def buscar(self):
-        # Define quais variáveis pegar baseado no que está visível
         tipo = self.combo_tipo.currentText()
         
         termo = ""
         modo = "CNPJ"
         nf_filtro = None
 
+        # Lógica para decidir de onde tirar os dados
+        usar_busca_grupo = False
+        
         if tipo == "Itens de Giro":
-            termo = self.txt_termo_giro.text()
             if self.rb_grupo.isChecked():
-                modo = "GRUPO"
+                usar_busca_grupo = True
             else:
-                modo = "CNPJ"
+                usar_busca_grupo = False # É Giro, mas por CNPJ
         else:
-            # Garantia ou Crédito
+            usar_busca_grupo = False # Garantia/Crédito
+
+        if usar_busca_grupo:
+            # Busca por Grupo
+            termo = self.txt_termo_grupo.text()
+            modo = "GRUPO"
+        else:
+            # Busca por CNPJ (seja Giro ou Normal)
             termo = self.txt_cnpj_padrao.text()
+            modo = "CNPJ"
             nf_input = self.txt_nf_garantia.text()
             if nf_input:
                 nf_filtro = nf_input
-            modo = "CNPJ"
 
-        # Validação simples antes de chamar controller
+        # Validação
         if not termo:
-            QMessageBox.warning(self, "Atenção", "Preencha o campo de busca (CNPJ ou Grupo).")
+            msg_campo = "Nome do Grupo" if modo == "GRUPO" else "CNPJ do Cliente"
+            QMessageBox.warning(self, "Atenção", f"Preencha o campo {msg_campo}.")
             return
 
-        # Chama o controller original sem modificação
         self.itens_carregados = self.controller.buscar_pendencias(termo, modo, nf_filtro)
         self.popular_tabela()
 
     def popular_tabela(self):
+        # ... (O código permanece idêntico) ...
         self.table.blockSignals(True)
         self.table.setRowCount(0)
         for i, dto in enumerate(self.itens_carregados):
@@ -283,12 +306,11 @@ class PageRetorno(QWidget):
             self.table.setItem(i, 0, chk)
             
             def c(t): 
-                it = QTableWidgetItem(str(t)) # str() para segurança
+                it = QTableWidgetItem(str(t)) 
                 it.setTextAlignment(Qt.AlignCenter)
                 return it
             
             self.table.setItem(i, 1, c(dto.numero_nota_origem))
-            # Tratamento caso data seja None ou string
             data_str = dto.data_nota_origem.strftime("%d/%m/%Y") if hasattr(dto.data_nota_origem, 'strftime') else str(dto.data_nota_origem)
             self.table.setItem(i, 2, c(data_str))
             
@@ -309,6 +331,7 @@ class PageRetorno(QWidget):
         if item.column() in [0, 6]: self.recalcular_totais()
 
     def recalcular_totais(self):
+        # ... (O código permanece idêntico) ...
         val_nota = self.spin_valor_retorno.value()
         total_sel = 0.0
         linhas_marcadas = 0
@@ -352,24 +375,26 @@ class PageRetorno(QWidget):
         self.btn_confirmar.setText(msg)
         self.btn_confirmar.setEnabled(liberado)
         self.btn_confirmar.setObjectName("btn_success" if liberado else "btn_disabled")
-        self.btn_confirmar.setStyle(self.btn_confirmar.style()) 
+        self.btn_confirmar.setStyle(self.btn_confirmar.style())
 
     def salvar_final(self):
+        # ... (O código permanece idêntico até a parte de pegar os CNPJs) ...
         itens = []
         for r in range(self.table.rowCount()):
             chk = self.table.item(r, 0)
             if chk.checkState() == Qt.Checked:
                 itens.append(chk.data(Qt.UserRole))
         
-        # Determina o CNPJ e o Grupo com base na seleção
         cnpj_final = None
         grupo_final = None
         
+        # Ajuste na lógica de captura dos dados finais
         if self.combo_tipo.currentText() == "Itens de Giro":
             if self.rb_grupo.isChecked():
-                grupo_final = self.txt_termo_giro.text()
+                grupo_final = self.txt_termo_grupo.text()
             else:
-                cnpj_final = self.txt_termo_giro.text()
+                # Giro por CNPJ usa o campo padrão
+                cnpj_final = self.txt_cnpj_padrao.text()
         else:
             cnpj_final = self.txt_cnpj_padrao.text()
 
@@ -392,7 +417,7 @@ class PageRetorno(QWidget):
     def resetar_tela(self):
         self.txt_cnpj_padrao.clear()
         self.txt_nf_garantia.clear()
-        self.txt_termo_giro.clear()
+        self.txt_termo_grupo.clear()
         self.txt_num_nota.clear()
         self.spin_valor_retorno.setValue(0)
         self.table.setRowCount(0)
