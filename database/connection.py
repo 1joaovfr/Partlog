@@ -3,7 +3,6 @@ from psycopg2.extras import RealDictCursor
 from contextlib import contextmanager
 
 # Configuração de Banco de Dados
-# TODO: Para produção, mover estas variáveis para variáveis de ambiente (.env)
 DB_CONFIG = {
     'dbname': 'cardex_db',
     'user': 'dev',
@@ -22,7 +21,6 @@ class DatabaseConnection:
     def get_connection(self):
         """
         Generator que fornece uma conexão segura com o banco.
-        Garante commit automático em caso de sucesso e rollback/close em falhas.
         """
         conn = psycopg2.connect(**DB_CONFIG)
         try:
@@ -32,15 +30,7 @@ class DatabaseConnection:
 
     def execute_query(self, query: str, params=None, fetch=False):
         """
-        Executa uma query SQL de forma segura (prevenção contra SQL Injection via params).
-        
-        Args:
-            query (str): O comando SQL.
-            params (tuple, optional): Parâmetros para substituição na query.
-            fetch (bool): Se True, retorna os resultados (SELECT). Se False, apenas commita (INSERT/UPDATE).
-            
-        Returns:
-            list[dict] | None: Lista de dicionários se fetch=True.
+        Executa uma query SQL de forma segura.
         """
         with self.get_connection() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cursor:
@@ -52,10 +42,8 @@ class DatabaseConnection:
     def setup_database(self):
         """
         Executa a Auto-Migração do banco de dados.
-        Verifica se as tabelas existem e cria a estrutura necessária.
-        Também aplica patches de correção (alter table) se necessário.
         """
-        # Estrutura inicial das tabelas
+        # Estrutura inicial das tabelas (JÁ COM OS CAMPOS NOVOS)
         queries_creation = [
             '''CREATE TABLE IF NOT EXISTS clientes (
                 cnpj TEXT PRIMARY KEY,
@@ -75,14 +63,17 @@ class DatabaseConnection:
                 descricao_avaria TEXT,
                 status_avaria TEXT
             )''',
+            # A tabela notas_fiscais já nasce completa aqui
             '''CREATE TABLE IF NOT EXISTS notas_fiscais (
                 id SERIAL PRIMARY KEY,
                 numero_nota TEXT,
                 data_nota DATE,
                 cnpj_cliente TEXT,
+                cnpj_remetente TEXT, 
                 data_recebimento DATE,
                 data_lancamento DATE,
-                FOREIGN KEY (cnpj_cliente) REFERENCES clientes(cnpj)
+                FOREIGN KEY (cnpj_cliente) REFERENCES clientes(cnpj),
+                FOREIGN KEY (cnpj_remetente) REFERENCES clientes(cnpj)
             )''',
             '''CREATE TABLE IF NOT EXISTS itens_notas (
                 id SERIAL PRIMARY KEY,
@@ -121,7 +112,8 @@ class DatabaseConnection:
             )'''
         ]
 
-        # Migrações para garantir consistência em bancos já existentes
+        # Migrações: Mantive apenas as genéricas de correção de dados antigos (saldo e grupo)
+        # Removi a criação de coluna e FK na notas_fiscais, pois o CREATE acima já resolve.
         queries_migration = [
             "ALTER TABLE clientes ADD COLUMN IF NOT EXISTS grupo TEXT;",
             "ALTER TABLE itens_notas ADD COLUMN IF NOT EXISTS saldo_financeiro REAL DEFAULT 0;",

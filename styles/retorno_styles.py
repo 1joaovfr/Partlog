@@ -1,7 +1,65 @@
 from styles.common import COMMON_STYLES
 from styles.theme import *
 
-RETORNO_STYLES = COMMON_STYLES + f"""
+# 1. Definição dos Ícones (Copiado da tela de Análise)
+ICON_ARROW_DOWN = "views/icons/arrow_down.png"
+ICON_ARROW_UP   = "views/icons/arrow_up.png"
+
+# 2. CSS do ComboBox Moderno (Copiado da tela de Análise)
+COMBOBOX_MODERNO = f"""
+QComboBox {{
+    background-color: {COLOR_INPUT_BG};
+    border: 1px solid {COLOR_INPUT_BORDER};
+    border-radius: 4px;
+    padding: 5px;
+    padding-left: 10px;
+    padding-right: 20px; /* Espaço para a seta não ficar em cima do texto */
+    color: {COLOR_TEXT};
+    font-size: 13px;
+}}
+
+QComboBox:focus {{
+    border: 1px solid {COLOR_FOCUS};
+    background-color: #1a202c;
+}}
+
+/* Área do botão da seta (lado direito) */
+QComboBox::drop-down {{
+    subcontrol-origin: padding;
+    subcontrol-position: top right;
+    width: 25px;
+    border-left: 0px solid {COLOR_INPUT_BORDER};
+    border-top-right-radius: 4px;
+    border-bottom-right-radius: 4px;
+}}
+
+/* --- ESTADO PADRÃO (FECHADO) --- */
+QComboBox::down-arrow {{
+    image: url("{ICON_ARROW_DOWN}");
+    width: 12px;
+    height: 12px;
+}}
+
+/* --- ESTADO ATIVO (ABERTO) --- */
+QComboBox::down-arrow:on {{
+    image: url("{ICON_ARROW_UP}");
+    width: 12px;
+    height: 12px;
+    top: 1px;
+}}
+
+/* Item selecionado na lista dropdown (Popup) */
+QComboBox QAbstractItemView {{
+    border: 1px solid {COLOR_CARD_BORDER};
+    selection-background-color: {COLOR_FOCUS};
+    background-color: {COLOR_INPUT_BG};
+    color: {COLOR_TEXT};
+    outline: 0px;
+}}
+"""
+
+# 3. Integração com os estilos existentes da tela de Retorno
+RETORNO_STYLES = COMMON_STYLES + COMBOBOX_MODERNO + f"""
 
 /* --- CORREÇÃO DE FUNDO (#1b212d) --- */
 QCheckBox, QRadioButton {{
@@ -74,4 +132,15 @@ QTableWidget {{
 QHeaderView::section:first {{ border-top-left-radius: 6px; }}
 QHeaderView::section:last {{ border-top-right-radius: 6px; }}
 QTableWidget::item {{ padding: 5px; }}
+
+/* --- SPINBOXES (Igual Lançamento) --- */
+QSpinBox::up-button, QSpinBox::down-button,
+QDoubleSpinBox::up-button, QDoubleSpinBox::down-button {{
+    width: 0px;
+    border-width: 0px;
+}}
+
+QSpinBox, QDoubleSpinBox {{
+    padding-right: 0px; 
+}}
 """

@@ -7,6 +7,7 @@ class NotaFiscalDTO:
     emissao: date
     recebimento: date
     cnpj_cliente: str
+    cnpj_remetente: str # Novo campo obrigatório
     
 @dataclass
 class ItemNotaDTO:

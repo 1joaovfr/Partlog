@@ -19,7 +19,7 @@ class PageRetorno(QWidget):
         self.controller = RetornoController()
         self.itens_carregados: list[ItemPendenteDTO] = []
         
-        self.setStyleSheet(RETORNO_STYLES + get_date_edit_style())
+        self.setStyleSheet(RETORNO_STYLES + get_date_edit_style("views/icons/temp_calendar_icon.png"))
         self.init_ui()
 
     def init_ui(self):
@@ -35,29 +35,43 @@ class PageRetorno(QWidget):
         self.atualizar_visibilidade_filtros()
 
     def setup_header(self, parent_layout):
-        # ... (O código do header permanece idêntico ao seu original) ...
         frame = QFrame(objectName="FormCard")
         vbox = QVBoxLayout(frame)
         vbox.addWidget(QLabel("DADOS DA NOTA DE RETORNO", objectName="SectionTitle"))
         
         hbox = QHBoxLayout()
+        
+        # --- 1. COMBOBOX (Tamanho Fixo) ---
         self.combo_tipo = QComboBox()
         self.combo_tipo.addItems(["Garantia Simples", "Tratativa de Crédito", "Itens de Giro"])
+        self.combo_tipo.setFixedWidth(200) # Tamanho fixo definido
         self.combo_tipo.currentIndexChanged.connect(self.atualizar_visibilidade_filtros)
         
+        # --- 2. NOTA FISCAL (Tamanho Fixo igual Lançamento) ---
         self.txt_num_nota = QLineEdit(placeholderText="Nº Nota Retorno")
-        self.date_emissao = QDateEdit(calendarPopup=True, date=QDate.currentDate())
+        self.txt_num_nota.setFixedWidth(150) # Tamanho fixo definido
         
+        # --- 3. EMISSÃO (Já estava fixo) ---
+        self.date_emissao = QDateEdit(calendarPopup=True, date=QDate.currentDate())
+        self.date_emissao.setFixedWidth(130) 
+        
+        # --- 4. VALOR (Já estava fixo) ---
         self.spin_valor_retorno = QDoubleSpinBox()
         self.spin_valor_retorno.setPrefix("R$ ")
-        self.spin_valor_retorno.setRange(0, 10000000)
-        self.spin_valor_retorno.setAlignment(Qt.AlignRight)
+        self.spin_valor_retorno.setRange(0.00, 999999.99)
+        self.spin_valor_retorno.setFixedWidth(100)
+        self.spin_valor_retorno.setSpecialValueText(" ")
+        self.spin_valor_retorno.setValue(0.00)
         self.spin_valor_retorno.valueChanged.connect(self.recalcular_totais)
 
-        self.add_field(hbox, "Tipo de Retorno:", self.combo_tipo, 1)
-        self.add_field(hbox, "Número Nota:", self.txt_num_nota, 1)
-        self.add_field(hbox, "Emissão:", self.date_emissao, 1)
-        self.add_field(hbox, "Valor Total:", self.spin_valor_retorno, 1)
+        # Adicionando ao layout com stretch=0 (para respeitar o tamanho fixo)
+        self.add_field(hbox, "Tipo de Retorno:", self.combo_tipo, 0)
+        self.add_field(hbox, "Número Nota:", self.txt_num_nota, 0)
+        self.add_field(hbox, "Emissão:", self.date_emissao, 0)
+        self.add_field(hbox, "Valor Total:", self.spin_valor_retorno, 0)
+        
+        # Empurra tudo para a esquerda para não ficar buracos entre os campos
+        hbox.addStretch()
         
         vbox.addLayout(hbox)
         parent_layout.addWidget(frame)
@@ -103,10 +117,15 @@ class PageRetorno(QWidget):
         layout_padrao = QHBoxLayout(self.container_padrao)
         layout_padrao.setContentsMargins(0, 0, 0, 0)
         
-        self.txt_cnpj_padrao = QLineEdit(placeholderText="CNPJ do Cliente")
+        # --- ALTERAÇÃO AQUI: Padronização com o Módulo de Lançamento ---
+        self.txt_cnpj_padrao = QLineEdit(placeholderText="CNPJ Emitente") 
+        self.txt_cnpj_padrao.setInputMask("99.999.999/9999-99;_")
+        self.txt_cnpj_padrao.setFixedWidth(150)
+        
         self.txt_nf_garantia = QLineEdit(placeholderText="Nº Nota(s) de Garantia")
         
-        self.add_field(layout_padrao, "CNPJ do Cliente:", self.txt_cnpj_padrao, 1)
+        # O stretch do CNPJ foi alterado para 0 (fixo) e o da Nota para 1 (expansível)
+        self.add_field(layout_padrao, "CNPJ do Cliente:", self.txt_cnpj_padrao, 0)
         self.add_field(layout_padrao, "Nota Fiscal (Opcional):", self.txt_nf_garantia, 1)
         
         # B) Container GRUPO (Apenas input de texto simples) - Usado em Giro(Por Grupo)

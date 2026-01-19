@@ -1,5 +1,5 @@
 import random
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date # <--- Import 'date' adicionado
 from database.connection import DatabaseConnection
 
 class DatabaseSeeder:
@@ -100,7 +100,9 @@ class DatabaseSeeder:
             conn.commit()
 
     def seed_movimentacao(self):
-        print("Gerando Movimentação Histórica (Jan/2025 a Nov/2025)...")
+        # --- LÓGICA DE DATA ATUAL (Corrigido para .date()) ---
+        hoje = datetime.now().date()
+        print(f"Gerando Movimentação Histórica (Jan/2025 até {hoje.strftime('%d/%m/%Y')})...")
         
         # 1. Recuperar dados base
         lista_cnpjs = []
@@ -127,95 +129,134 @@ class DatabaseSeeder:
         total_notas = 0
         total_itens = 0
 
-        # LOOP MESES
-        for mes in range(1, 12): # Jan a Nov
-            letra_mes = chr(ord('A') + mes - 1)
+        # --- LOOP ANUAL (2025 até o ano atual) ---
+        ano_inicial = 2025
+        ano_final = hoje.year
+        
+        for ano in range(ano_inicial, ano_final + 1):
             
-            # LOOP NOTAS (20 por mês)
-            for _ in range(20): 
-                cnpj_escolhido = random.choice(lista_cnpjs)
-                num_nota = f"{random.randint(10000, 99999)}"
+            # Definir intervalo de meses para este ano
+            mes_inicio = 1
+            mes_fim = 12
+            
+            # Se for o ano atual, vai só até o mês atual
+            if ano == ano_final:
+                mes_fim = hoje.month
+            
+            # LOOP MESES
+            for mes in range(mes_inicio, mes_fim + 1):
+                letra_mes = chr(ord('A') + mes - 1)
                 
-                dia = random.randint(1, 28)
-                data_nota = datetime(2025, mes, dia)
-                data_recebimento = data_nota + timedelta(days=random.randint(1, 5))
-                data_lancamento = data_recebimento 
+                # Definir dia máximo
+                max_dia = 28
+                # Se for o mês exato de hoje, limita ao dia de hoje
+                if ano == ano_final and mes == hoje.month:
+                    max_dia = hoje.day
+                
+                if max_dia < 1: max_dia = 1
 
-                with self.db.get_connection() as conn:
-                    with conn.cursor() as cursor:
-                        # Inserir Nota
-                        sql_nota = """
-                            INSERT INTO notas_fiscais (numero_nota, cnpj_cliente, data_nota, data_recebimento, data_lancamento)
-                            VALUES (%s, %s, %s, %s, %s) RETURNING id
-                        """
-                        try:
-                            cursor.execute(sql_nota, (num_nota, cnpj_escolhido, data_nota, data_recebimento, data_lancamento))
-                            id_nota = cursor.fetchone()[0]
-                            total_notas += 1
-                        except Exception as e:
-                            print(f"Erro nota: {e}")
-                            continue
-
-                        # LOOP ITENS (5 a 10 por nota)
-                        qtd_itens = random.randint(5, 10) 
-                        
-                        for _ in range(qtd_itens):
-                            cod_prod = random.choice(lista_produtos)
-                            valor = round(random.uniform(100.00, 1500.00), 2)
-                            
-                            seq = contadores_mes[mes]
-                            cod_analise = f"{letra_mes}{seq:04d}"
-                            contadores_mes[mes] += 1
-                            
-                            is_pendente = random.random() < 0.40
-                            
-                            status_final = 'Pendente'
-                            data_analise_item = None
-                            cod_avaria = None
-                            desc_avaria = None
-                            proc_improc = None
-                            ressarcimento = 0.0
-                            
-                            if not is_pendente:
-                                avaria_db = random.choice(lista_avarias)
-                                resultado_analise = avaria_db[2] # 'Procedente' ou 'Improcedente'
-                                
-                                status_final = resultado_analise 
-                                proc_improc = resultado_analise
-                                
-                                cod_avaria = avaria_db[0]
-                                desc_avaria = avaria_db[1]
-                                data_analise_item = data_recebimento + timedelta(days=random.randint(1, 10))
-                                
-                                # Lógica de Ressarcimento:
-                                # Se procedente, vamos supor um ressarcimento entre 10% a 30% do valor (Mão de Obra)
-                                # Se improcedente, ressarcimento é 0.
-                                if status_final == 'Procedente':
-                                    ressarcimento = round(valor * random.uniform(0.10, 0.30), 2)
-                                else:
-                                    ressarcimento = 0.0
-
-                            sql_item = """
-                                INSERT INTO itens_notas (
-                                    id_nota_fiscal, codigo_item, valor_item, ressarcimento, 
-                                    status, codigo_analise, data_analise, numero_serie,
-                                    codigo_avaria, descricao_avaria, procedente_improcedente,
-                                    produzido_revenda, fornecedor
-                                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                            """
-                            
-                            valores_item = (
-                                id_nota, cod_prod, valor, ressarcimento,
-                                status_final, cod_analise, data_analise_item,
-                                f"NS{random.randint(100000,999999)}",
-                                cod_avaria, desc_avaria, proc_improc,
-                                random.choice(['Produzido', 'Revenda']),
-                                "Fornecedor Padrão LTDA"
-                            )
-                            cursor.execute(sql_item, valores_item)
-                            total_itens += 1
+                # LOOP NOTAS (20 por mês)
+                for _ in range(20): 
+                    cnpj_cliente = random.choice(lista_cnpjs)
                     
-                    conn.commit()
+                    # 80% Cliente, 20% Outro (Triangulação)
+                    if random.random() < 0.8:
+                        cnpj_remetente = cnpj_cliente
+                    else:
+                        cnpj_remetente = random.choice(lista_cnpjs)
+
+                    num_nota = f"{random.randint(10000, 99999)}"
+                    
+                    dia = random.randint(1, max_dia)
+                    # CORREÇÃO: Usar date() em vez de datetime()
+                    data_nota = date(ano, mes, dia)
+                    
+                    # Data recebimento não pode ser futura
+                    dias_delay = random.randint(1, 5)
+                    data_recebimento = data_nota + timedelta(days=dias_delay)
+                    
+                    if data_recebimento > hoje:
+                        data_recebimento = hoje
+                        
+                    data_lancamento = data_recebimento 
+
+                    with self.db.get_connection() as conn:
+                        with conn.cursor() as cursor:
+                            # Inserir Nota (COM O CAMPO REMETENTE)
+                            sql_nota = """
+                                INSERT INTO notas_fiscais (numero_nota, cnpj_cliente, cnpj_remetente, data_nota, data_recebimento, data_lancamento)
+                                VALUES (%s, %s, %s, %s, %s, %s) RETURNING id
+                            """
+                            try:
+                                cursor.execute(sql_nota, (num_nota, cnpj_cliente, cnpj_remetente, data_nota, data_recebimento, data_lancamento))
+                                id_nota = cursor.fetchone()[0]
+                                total_notas += 1
+                            except Exception as e:
+                                print(f"Erro nota: {e}")
+                                continue
+
+                            # LOOP ITENS (5 a 10 por nota)
+                            qtd_itens = random.randint(5, 10) 
+                            
+                            for _ in range(qtd_itens):
+                                cod_prod = random.choice(lista_produtos)
+                                valor = round(random.uniform(100.00, 1500.00), 2)
+                                
+                                seq = contadores_mes[mes]
+                                cod_analise = f"{letra_mes}{seq:04d}"
+                                contadores_mes[mes] += 1
+                                
+                                is_pendente = random.random() < 0.40
+                                
+                                status_final = 'Pendente'
+                                data_analise_item = None
+                                cod_avaria = None
+                                desc_avaria = None
+                                proc_improc = None
+                                ressarcimento = 0.0
+                                
+                                if not is_pendente:
+                                    avaria_db = random.choice(lista_avarias)
+                                    resultado_analise = avaria_db[2] 
+                                    
+                                    status_final = resultado_analise 
+                                    proc_improc = resultado_analise
+                                    
+                                    cod_avaria = avaria_db[0]
+                                    desc_avaria = avaria_db[1]
+                                    
+                                    # Data análise deve ser > recebimento e <= hoje
+                                    dias_analise = random.randint(1, 10)
+                                    data_analise_item = data_recebimento + timedelta(days=dias_analise)
+                                    if data_analise_item > hoje:
+                                        data_analise_item = hoje
+                                    
+                                    if status_final == 'Procedente':
+                                        ressarcimento = round(valor * random.uniform(0.10, 0.30), 2)
+                                    else:
+                                        ressarcimento = 0.0
+
+                                sql_item = """
+                                    INSERT INTO itens_notas (
+                                        id_nota_fiscal, codigo_item, valor_item, ressarcimento, 
+                                        status, codigo_analise, data_analise, numero_serie,
+                                        codigo_avaria, descricao_avaria, procedente_improcedente,
+                                        produzido_revenda, fornecedor
+                                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                                """
+                                
+                                valores_item = (
+                                    id_nota, cod_prod, valor, ressarcimento,
+                                    status_final, cod_analise, data_analise_item,
+                                    f"NS{random.randint(100000,999999)}",
+                                    cod_avaria, desc_avaria, proc_improc,
+                                    random.choice(['Produzido', 'Revenda']),
+                                    "Fornecedor Padrão LTDA"
+                                )
+                                cursor.execute(sql_item, valores_item)
+                                total_itens += 1
+                        
+                        conn.commit()
         
         print(f"\n✅ Geração de Entradas Concluída!")
         print(f"   Total Notas Entrada: {total_notas}")
@@ -224,12 +265,13 @@ class DatabaseSeeder:
     def seed_retornos(self):
         """
         Gera notas de retorno (financeiro/físico) baseadas nos itens já analisados.
-        Regra: Agrupa itens analisados por Cliente e gera uma Nota de Retorno para eles.
         """
         print("\nGerando Notas de Retorno e Conciliação...")
+        
+        # Data de hoje para comparação (Tipo date)
+        hoje = datetime.now().date() 
 
-        # 1. Buscar todos os itens que já foram analisados (Procedente/Improcedente)
-        #    e que ainda não têm vínculo na tabela 'conciliacao' (embora o banco esteja limpo agora)
+        # 1. Buscar todos os itens que já foram analisados
         sql_candidatos = """
             SELECT 
                 i.id, i.valor_item, i.ressarcimento, i.procedente_improcedente, 
@@ -244,7 +286,7 @@ class DatabaseSeeder:
         with self.db.get_connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(sql_candidatos)
-                itens_candidatos = cursor.fetchall() # Retorna lista de dicts ou tuplas dependendo do cursor
+                itens_candidatos = cursor.fetchall() 
 
         if not itens_candidatos:
             print("Nenhum item analisado encontrado para gerar retorno.")
@@ -255,45 +297,43 @@ class DatabaseSeeder:
         itens_por_cliente = defaultdict(list)
         
         for item in itens_candidatos:
-            # item[5] é cnpj_cliente (se for tupla) ou item['cnpj_cliente']
-            cnpj = item['cnpj_cliente'] if isinstance(item, dict) else item[5]
+            if isinstance(item, dict):
+                cnpj = item['cnpj_cliente']
+            else:
+                cnpj = item[5]
             itens_por_cliente[cnpj].append(item)
 
         total_notas_retorno = 0
         total_conciliados = 0
 
-        # 3. Para cada cliente, criar notas de retorno em lotes
+        # 3. Para cada cliente, criar notas de retorno
         with self.db.get_connection() as conn:
             with conn.cursor() as cursor:
                 
                 for cnpj, lista_itens in itens_por_cliente.items():
-                    # Vamos processar em lotes de 3 a 8 itens por Nota de Retorno
-                    # Para simular que a empresa junta alguns itens antes de emitir a nota
+                    random.shuffle(lista_itens) 
                     
-                    random.shuffle(lista_itens) # Embaralha para não pegar só sequencial
-                    
-                    # Fatiar a lista em chunks
                     chunk_size = random.randint(3, 8)
                     chunks = [lista_itens[i:i + chunk_size] for i in range(0, len(lista_itens), chunk_size)]
                     
                     for batch in chunks:
-                        # Dados para o Cabeçalho da Nota de Retorno
-                        # A data da nota de retorno deve ser posterior à última análise do lote
                         datas_analise = [x['data_analise'] if isinstance(x, dict) else x[4] for x in batch]
-                        max_data_analise = max(datas_analise)
                         
-                        # Data Emissão = Data da última análise + 2 a 15 dias
+                        datas_validas = [d for d in datas_analise if d]
+                        if not datas_validas: continue
+
+                        max_data_analise = max(datas_validas)
+                        
+                        # Data Emissão Retorno > Última Análise e <= Hoje
                         data_emissao = max_data_analise + timedelta(days=random.randint(2, 15))
                         
-                        # Se a data calculada for no futuro (além de hoje), ajustamos para hoje ou ignoramos
-                        # Como o seed vai até Nov/2025 (no script), e estamos simulando, assumimos ok.
+                        # Ajuste para não gerar datas futuras
+                        if data_emissao > hoje:
+                            data_emissao = hoje
                         
                         numero_nota_ret = f"RET-{random.randint(1000, 99999)}"
-                        
-                        # Calcula totais
                         valor_total_nota = 0.0
                         
-                        # Inserir Cabeçalho (Nota Retorno) inicialmente com valor 0
                         sql_insert_nota = """
                             INSERT INTO notas_retorno (
                                 numero_nota, data_emissao, tipo_retorno, cnpj_cliente, 
@@ -305,15 +345,13 @@ class DatabaseSeeder:
                             data_emissao, 
                             "Garantia/Devolucao", 
                             cnpj, 
-                            "Varejo", # Simplificação
+                            "Varejo", 
                             0.0 
                         ))
                         id_nota_retorno = cursor.fetchone()[0]
                         total_notas_retorno += 1
 
-                        # Inserir Itens na Conciliação
                         for item in batch:
-                            # Extrair dados
                             if isinstance(item, dict):
                                 i_id = item['id']
                                 i_valor = item['valor_item']
@@ -322,11 +360,6 @@ class DatabaseSeeder:
                             else:
                                 i_id, i_valor, i_ressarc, i_status = item[0], item[1], item[2], item[3]
 
-                            # Regra de Negócio para Valor Abatido:
-                            # Se PROCEDENTE: Valor Abatido = Valor Item + Ressarcimento (Empresa paga tudo)
-                            # Se IMPROCEDENTE: Valor Abatido = 0 (Geralmente devolução física sem crédito financeiro)
-                            # Mas vinculamos a nota para provar que foi devolvido.
-                            
                             valor_abatido = 0.0
                             if i_status == 'Procedente':
                                 valor_abatido = float(i_valor) + float(i_ressarc)
@@ -343,7 +376,6 @@ class DatabaseSeeder:
                             valor_total_nota += valor_abatido
                             total_conciliados += 1
 
-                        # Atualizar o valor total da Nota de Retorno
                         cursor.execute(
                             "UPDATE notas_retorno SET valor_total_nota = %s WHERE id = %s",
                             (valor_total_nota, id_nota_retorno)
@@ -363,8 +395,8 @@ class DatabaseSeeder:
             self.seed_itens()
             self.seed_avarias()
             
-            self.seed_movimentacao() # Gera Entradas e Análises
-            self.seed_retornos()     # Gera Saídas (Retornos) baseadas nas análises
+            self.seed_movimentacao() 
+            self.seed_retornos()    
             
             print("\n✅ Banco de dados populado com sucesso!")
         except Exception as e:

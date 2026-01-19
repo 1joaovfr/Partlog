@@ -28,33 +28,6 @@ class PageLancamento(QWidget):
         lbl_header.setObjectName("SectionTitle")
         layout_header.addWidget(lbl_header)
 
-        row1 = QHBoxLayout()
-        
-        # --- 1. CONFIGURAÇÃO CNPJ (FIXO) ---
-        self.txt_cnpj = QLineEdit(placeholderText="CNPJ Emitente")
-        mascara_cnpj = "99.999.999/9999-99"
-        self.txt_cnpj.setInputMask(mascara_cnpj + ";_")
-        
-        # Tamanho fixo testado para CNPJ (18 caracteres)
-        # 150px é uma medida segura para a fonte Segoe UI 13px padrão
-        self.txt_cnpj.setFixedWidth(150) 
-        
-        self.txt_cnpj.textChanged.connect(self.buscar_emitente)        
-        
-        self.txt_cnpj.textChanged.connect(self.buscar_emitente)
-        
-        self.txt_emitente = QLineEdit(placeholderText="Razão Social", readOnly=True)
-        
-        self.txt_num_nf = QLineEdit(placeholderText="Nº Nota")
-        self.txt_num_nf.setFixedWidth(150)
-
-        # QDateEdit com calendarPopup=True
-        self.dt_emissao = QDateEdit(calendarPopup=True, date=QDate.currentDate())
-        self.dt_emissao.setFixedWidth(130)
-        
-        self.dt_recebimento = QDateEdit(calendarPopup=True, date=QDate.currentDate())
-        self.dt_recebimento.setFixedWidth(130)
-
         # Helper layouts
         def v_box(lbl, widget):
             l = QVBoxLayout()
@@ -62,9 +35,39 @@ class PageLancamento(QWidget):
             l.addWidget(widget)
             return l
 
+        # --- LINHA ÚNICA DE CABEÇALHO ---
+        row1 = QHBoxLayout()
+        mascara_cnpj = "99.999.999/9999-99"
+
+        # 1. CNPJ REMETENTE (Sua Empresa/Filial) - PRIMEIRO CAMPO
+        self.txt_cnpj_remetente = QLineEdit(placeholderText="CNPJ Destino/Grupo")
+        self.txt_cnpj_remetente.setInputMask(mascara_cnpj + ";_")
+        self.txt_cnpj_remetente.setFixedWidth(150)
+
+        # 2. CNPJ EMITENTE (Cliente)
+        self.txt_cnpj = QLineEdit(placeholderText="CNPJ Cliente")
+        self.txt_cnpj.setInputMask(mascara_cnpj + ";_")
+        self.txt_cnpj.setFixedWidth(150) 
+        self.txt_cnpj.textChanged.connect(self.buscar_emitente)        
+        
+        # 3. NOME EMITENTE (Visualização apenas do cliente)
+        self.txt_emitente = QLineEdit(placeholderText="Razão Social Cliente", readOnly=True)
+        
+        # 4. DADOS DA NOTA
+        self.txt_num_nf = QLineEdit(placeholderText="Nº Nota")
+        self.txt_num_nf.setFixedWidth(150)
+
+        self.dt_emissao = QDateEdit(calendarPopup=True, date=QDate.currentDate())
+        self.dt_emissao.setFixedWidth(130)
+        
+        self.dt_recebimento = QDateEdit(calendarPopup=True, date=QDate.currentDate())
+        self.dt_recebimento.setFixedWidth(130)
+
+        # ADICIONANDO NA ORDEM: Remetente -> Emitente -> Nome -> NF -> Datas
+        row1.addLayout(v_box("CNPJ Remetente", self.txt_cnpj_remetente))
         row1.addLayout(v_box("CNPJ Emitente", self.txt_cnpj))
-        row1.addLayout(v_box("Nome do Emitente", self.txt_emitente))
-        row1.addLayout(v_box("Nº NF-e", self.txt_num_nf))
+        row1.addLayout(v_box("Razão Social (Emitente)", self.txt_emitente))
+        row1.addLayout(v_box("Nº Nota", self.txt_num_nf))
         row1.addLayout(v_box("Emissão", self.dt_emissao))
         row1.addLayout(v_box("Recebimento", self.dt_recebimento))
         
@@ -85,20 +88,17 @@ class PageLancamento(QWidget):
         self.txt_cod_item = QLineEdit(placeholderText="Cód.")
         self.txt_cod_item.setFixedWidth(80)
 
-        # --- 3. CONFIGURAÇÃO SPINBOX (VAZIOS) ---
-        # QUANTIDADE
         self.spin_qtd = QSpinBox()
         self.spin_qtd.setFixedWidth(70)
-        self.spin_qtd.setRange(0, 9999) # Mínimo 0 para permitir limpar
-        self.spin_qtd.setSpecialValueText(" ") # Se valor for 0, mostra vazio
-        self.spin_qtd.setValue(0) # Inicia vazio
+        self.spin_qtd.setRange(0, 9999) 
+        self.spin_qtd.setSpecialValueText(" ") 
+        self.spin_qtd.setValue(0) 
         
-        # VALOR UNITÁRIO
         self.spin_valor = QDoubleSpinBox()
         self.spin_valor.setRange(0.00, 999999.99)
         self.spin_valor.setPrefix("R$ ")
         self.spin_valor.setFixedWidth(100)
-        self.spin_valor.setSpecialValueText(" ") # Se for 0.00, mostra vazio
+        self.spin_valor.setSpecialValueText(" ") 
         self.spin_valor.setValue(0.00)
 
         self.chk_ressarcimento = QCheckBox("Ressarcimento?")
@@ -108,12 +108,11 @@ class PageLancamento(QWidget):
         self.lbl_vlr_ressarc = QLabel("Vl. Ressarc:")
         self.lbl_vlr_ressarc.setVisible(False)
         
-        # VALOR RESSARCIMENTO
         self.spin_vlr_ressarc = QDoubleSpinBox()
         self.spin_vlr_ressarc.setRange(0.00, 999999.99)
         self.spin_vlr_ressarc.setPrefix("R$ ")
         self.spin_vlr_ressarc.setFixedWidth(100)
-        self.spin_vlr_ressarc.setSpecialValueText(" ") # Vazio se 0
+        self.spin_vlr_ressarc.setSpecialValueText(" ") 
         self.spin_vlr_ressarc.setValue(0.00)
         self.spin_vlr_ressarc.setVisible(False)
 
@@ -189,7 +188,6 @@ class PageLancamento(QWidget):
             QMessageBox.warning(self, "Aviso", "Preencha o código do item.")
             return
 
-        # Validação extra pois permitimos o valor 0 para visualização "vazia"
         qtd = self.spin_qtd.value()
         vlr_unit = self.spin_valor.value()
         
@@ -240,9 +238,8 @@ class PageLancamento(QWidget):
         
         self.table_itens.setItem(row, 5, criar_item_centro(f"R$ {vlr_ressarc:.2f}"))
 
-        # Limpar campos voltando para o estado "Vazio" (Zero)
         self.txt_cod_item.clear()
-        self.spin_qtd.setValue(0) # Volta a ficar "em branco" visualmente
+        self.spin_qtd.setValue(0)
         self.spin_valor.setValue(0.00)
         self.chk_ressarcimento.setChecked(False)
         self.txt_cod_item.setFocus()
@@ -264,6 +261,7 @@ class PageLancamento(QWidget):
             
         dados_nota = {
             'cnpj': self.txt_cnpj.text(),
+            'cnpj_remetente': self.txt_cnpj_remetente.text(), # Capturando o campo novo
             'numero': self.txt_num_nf.text(),
             'emissao': self.dt_emissao.date().toPython(),
             'recebimento': self.dt_recebimento.date().toPython()
@@ -283,6 +281,7 @@ class PageLancamento(QWidget):
             QMessageBox.information(self, "Sucesso", "Nota lançada com sucesso!")
             self.table_itens.setRowCount(0)
             self.txt_num_nf.clear()
+            self.txt_cnpj_remetente.clear()
             self.txt_cod_item.clear()
         except Exception as e:
             QMessageBox.critical(self, "Erro", str(e))

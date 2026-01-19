@@ -89,7 +89,11 @@ class PageRelatorio(QWidget):
     def __init__(self):
         super().__init__()
         self.setObjectName("PageRelatorio")
+        
+        # --- 1. O CONTROLLER DEVE SER A PRIMEIRA COISA A SER CRIADA ---
+        # Se isso não existir, o carregar_dados() vai falhar
         self.controller = RelatorioController()
+        
         self.setWindowTitle("Relatório Geral de Garantias")
         
         # --- APLICAÇÃO DE ESTILO ---
@@ -101,7 +105,10 @@ class PageRelatorio(QWidget):
         self.total_paginas = 1
 
         self.setup_ui()
-        self.carregar_dados() 
+        
+        # --- 2. AGORA PODEMOS CARREGAR OS DADOS ---
+        # Só chame isso depois que self.controller já existe
+        self.carregar_dados()
 
     def setup_ui(self):
         main_layout = QVBoxLayout(self)
@@ -129,9 +136,14 @@ class PageRelatorio(QWidget):
         
         card_layout.addLayout(header_layout)
 
+        # --- DEFINIÇÃO DAS COLUNAS DA TABELA ---
         self.colunas = [
             "Lançamento", "Recebimento", "Análise", "Status", "Cód. Análise",
-            "CNPJ", "Cliente", "Grp. Cliente", "Cidade", "UF", "Região", 
+            
+            # NOVAS COLUNAS
+            "CNPJ Remetente", "Remetente", 
+            
+            "CNPJ Emitente", "Emitente", "Grp. Cliente", "Cidade", "UF", "Região", 
             "Emissão", "Nota Fiscal",
             "Item", "Grp. Item", "Num. Série", "Cód. Avaria", "Desc. Avaria", 
             "Valor", "Ressarc.",
@@ -151,12 +163,14 @@ class PageRelatorio(QWidget):
         
         header = self.table.horizontalHeader()
         header.setDefaultSectionSize(120)
-
-        header.resizeSection(17, 250)
+        
+        # Ajustes de tamanho específicos
+        header.resizeSection(6, 200) # Remetente maior
+        header.resizeSection(8, 200) # Emitente maior
 
         card_layout.addWidget(self.table)
 
-        # --- PAGINAÇÃO ---
+        # --- PAGINAÇÃO (Mantém igual) ---
         pag_layout = QHBoxLayout()
         self.btn_prev = QPushButton(" Anterior")
         self.btn_prev.setObjectName("btn_pag")
@@ -190,36 +204,40 @@ class PageRelatorio(QWidget):
             for item in lista_dtos:
                 def fmt_moeda(val): return f"R$ {val:.2f}"
 
-                # AQUI É O PULO DO GATO: A ordem deve bater com self.colunas
+                # ORDEM DEVE BATER COM self.colunas
                 linha = [
-                    item.data_lancamento,     # 1. Lançamento
-                    item.data_recebimento,    # 2. Recebimento
-                    item.data_analise,        # 3. Análise
-                    item.status,              # 4. Status
-                    item.codigo_analise,      # 5. Cód Análise
+                    item.data_lancamento,     # 1
+                    item.data_recebimento,    # 2
+                    item.data_analise,        # 3
+                    item.status,              # 4
+                    item.codigo_analise,      # 5
                     
-                    item.cnpj,                # 6. CNPJ
-                    item.nome_cliente,        # 7. Cliente
-                    item.grupo_cliente,       # 8. Grp Cliente
-                    item.cidade,              # 9. Cidade
-                    item.estado,              # 10. UF
-                    item.regiao,              # 11. Região
+                    # NOVOS
+                    item.cnpj_remetente,      # 6
+                    item.nome_remetente,      # 7
                     
-                    item.data_emissao,        # 12. Emissão
-                    item.nf_entrada,          # 13. NF
+                    item.cnpj,                # 8 (Emitente)
+                    item.nome_cliente,        # 9
+                    item.grupo_cliente,       # 10
+                    item.cidade,              # 11
+                    item.estado,              # 12
+                    item.regiao,              # 13
                     
-                    item.codigo_item,         # 14. Item
-                    item.grupo_item,          # 15. Grp Item
-                    item.numero_serie,        # 16. Série
-                    item.codigo_avaria,       # 17. Cód Avaria
-                    item.descricao_avaria,    # 18. Desc Avaria
+                    item.data_emissao,        # 14
+                    item.nf_entrada,          # 15
                     
-                    fmt_moeda(item.valor_item),    # 19. Valor
-                    fmt_moeda(item.ressarcimento), # 20. Ressarc
+                    item.codigo_item,         # 16
+                    item.grupo_item,          # 17
+                    item.numero_serie,        # 18
+                    item.codigo_avaria,       # 19
+                    item.descricao_avaria,    # 20
                     
-                    item.data_retorno,        # 21. Retorno (Data) - Ajustei para bater com seu título
-                    item.nf_retorno,          # 22. NF Retorno
-                    item.tipo_retorno         # 23. Desc Retorno
+                    fmt_moeda(item.valor_item),    # 21
+                    fmt_moeda(item.ressarcimento), # 22
+                    
+                    item.data_retorno,        # 23
+                    item.nf_retorno,          # 24
+                    item.tipo_retorno         # 25
                 ]
                 self.todos_dados.append(linha)
 
@@ -234,6 +252,7 @@ class PageRelatorio(QWidget):
             import traceback
             traceback.print_exc()
 
+    # ... (atualizar_tabela, avancar_pagina, voltar_pagina, abrir_formulario_exportacao permanecem iguais) ...
     def atualizar_tabela(self):
         inicio = (self.pagina_atual - 1) * self.itens_por_pagina
         fim = inicio + self.itens_por_pagina
