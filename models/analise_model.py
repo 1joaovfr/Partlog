@@ -22,7 +22,11 @@ class AnaliseModel:
             JOIN notas_fiscais nf ON i.id_nota_fiscal = nf.id
             LEFT JOIN itens p ON i.codigo_item = p.codigo_item
             WHERE i.status = 'Pendente'
-            ORDER BY nf.data_lancamento ASC
+            -- ALTERAÇÃO AQUI:
+            -- Primeiro ordena por data (os mais antigos primeiro)
+            -- Depois agrupa pela nota fiscal (caso tenha notas diferentes no mesmo dia)
+            -- Por fim, ordena pelo código de análise (sequência lógica interna)
+            ORDER BY nf.data_lancamento ASC, nf.numero_nota ASC, i.codigo_analise ASC
         """
         return self.db.execute_query(sql, fetch=True)
 

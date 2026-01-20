@@ -1,13 +1,11 @@
 from database import DatabaseConnection
-# Ajuste o import conforme o nome exato da sua pasta de DTOs
 from dtos.retorno_dto import ItemPendenteDTO, RetornoHeaderDTO
 
 class RetornoModel:
     def __init__(self):
         self.db = DatabaseConnection()
 
-    def buscar_itens_pendentes(self, filtro_valor, tipo_filtro, nf_filtro=None) -> list[ItemPendenteDTO]:
-        # Usamos COALESCE para garantir que nulos sejam tratados como 0
+    def buscar_itens_pendentes(self, filtro_valor, tipo_filtro, lista_notas=None) -> list[ItemPendenteDTO]:
         query = """
             SELECT 
                 i.id, nf.numero_nota, nf.data_nota, 
@@ -22,28 +20,27 @@ class RetornoModel:
         params = []
 
         if tipo_filtro == 'CNPJ':
-            # Remove caracteres especiais do CNPJ para garantir busca limpa, se necessário
-            # Aqui mantive o like para flexibilidade ou = se for estrito
             query += " AND nf.cnpj_cliente = %s"
             params.append(filtro_valor)
             
-            if nf_filtro:
-                query += " AND nf.numero_nota = %s"
-                params.append(nf_filtro)
+            # Busca por Lista de Notas (se existir)
+            if lista_notas and len(lista_notas) > 0:
+                placeholders = ', '.join(['%s'] * len(lista_notas))
+                query += f" AND nf.numero_nota IN ({placeholders})"
+                params.extend(lista_notas)
         
         elif tipo_filtro == 'GRUPO':
-            # ILIKE faz a busca ignorando Maiúsculas/Minúsculas (Case Insensitive)
-            # O % ao redor permite buscar parte do nome
             query += " AND c.grupo ILIKE %s"
             params.append(f"%{filtro_valor}%")
 
         query += " ORDER BY nf.data_nota ASC"
 
-        print(f"SQL: {query}") # DEBUG
-        print(f"PARAMS: {params}") # DEBUG
+        print(f"DEBUG SQL: {query}")     # <--- Verifique se isso existe
+        print(f"DEBUG PARAMS: {params}") # <--- Verifique se isso existe
 
         resultados = self.db.execute_query(query, params, fetch=True)
         
+        # ... (Conversão para DTO igual ao seu código anterior) ...
         lista_dto = []
         for r in resultados:
             lista_dto.append(ItemPendenteDTO(
@@ -65,25 +62,32 @@ class RetornoModel:
             try:
                 cursor = conn.cursor()
                 
-                # 1. Inserir Cabeçalho da Nota de Retorno
+                # UPDATE SQL: Agora salva o CNPJ Emitente
                 sql_head = """
                     INSERT INTO notas_retorno 
-                    (numero_nota, data_emissao, tipo_retorno, cnpj_cliente, grupo_economico, valor_total_nota)
-                    VALUES (%s, %s, %s, %s, %s, %s) RETURNING id
+                    (numero_nota, data_emissao, tipo_retorno, cnpj_emitente, cnpj_remetente, grupo_economico, valor_total_nota)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id
                 """
+                
+                emitente_limpo = ''.join(filter(str.isdigit, header.cnpj_emitente))
+                remetente_limpo = ''.join(filter(str.isdigit, header.cnpj_remetente)) if header.cnpj_remetente else None
+
                 cursor.execute(sql_head, (
-                    header.numero_nota, header.data_emissao, header.tipo_retorno,
-                    header.cnpj, header.grupo, header.valor_total
+                    header.numero_nota, 
+                    header.data_emissao, 
+                    header.tipo_retorno,
+                    emitente_limpo,   # <--- Campo Novo
+                    remetente_limpo,  # <--- Campo Renomeado
+                    header.grupo, 
+                    header.valor_total
                 ))
                 id_retorno = cursor.fetchone()[0]
 
-                # 2. Processar Itens (Baixa de Saldo + Vinculo Conciliação)
+                # ... (Lógica de itens e conciliação permanece igual) ...
                 for item in itens:
-                    # Abate do saldo na tabela de entrada
                     sql_upd = "UPDATE itens_notas SET saldo_financeiro = saldo_financeiro - %s WHERE id = %s"
                     cursor.execute(sql_upd, (item.valor_a_abater, item.id))
 
-                    # Cria registro na tabela de conciliação
                     sql_con = """
                         INSERT INTO conciliacao (id_nota_retorno, id_item_entrada, valor_abatido) 
                         VALUES (%s, %s, %s)
@@ -91,7 +95,7 @@ class RetornoModel:
                     cursor.execute(sql_con, (id_retorno, item.id, item.valor_a_abater))
                 
                 conn.commit()
-                return True, "Nota de Retorno gravada com sucesso!"
+                return True, "Nota gravada com sucesso!"
             except Exception as e:
                 conn.rollback()
-                return False, f"Erro ao gravar no banco: {str(e)}"
+                return False, f"Erro SQL: {str(e)}"

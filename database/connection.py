@@ -63,7 +63,6 @@ class DatabaseConnection:
                 descricao_avaria TEXT,
                 status_avaria TEXT
             )''',
-            # A tabela notas_fiscais já nasce completa aqui
             '''CREATE TABLE IF NOT EXISTS notas_fiscais (
                 id SERIAL PRIMARY KEY,
                 numero_nota TEXT,
@@ -93,12 +92,14 @@ class DatabaseConnection:
                 fornecedor TEXT,
                 FOREIGN KEY (id_nota_fiscal) REFERENCES notas_fiscais(id)
             )''',
+            # --- TABELA ATUALIZADA COM CAMPOS NOVOS ---
             '''CREATE TABLE IF NOT EXISTS notas_retorno (
                 id SERIAL PRIMARY KEY,
                 numero_nota TEXT NOT NULL,
                 data_emissao DATE NOT NULL,
                 tipo_retorno TEXT NOT NULL,
-                cnpj_cliente TEXT,
+                cnpj_emitente TEXT,    -- Novo campo (Sua Empresa)
+                cnpj_remetente TEXT,   -- Renomeado de cnpj_cliente
                 grupo_economico TEXT,
                 valor_total_nota REAL NOT NULL,
                 created_at TIMESTAMP DEFAULT NOW()
@@ -112,21 +113,39 @@ class DatabaseConnection:
             )'''
         ]
 
-        # Migrações: Mantive apenas as genéricas de correção de dados antigos (saldo e grupo)
-        # Removi a criação de coluna e FK na notas_fiscais, pois o CREATE acima já resolve.
+        # Migrações: Garante que as colunas existam mesmo se a tabela já foi criada antes
         queries_migration = [
             "ALTER TABLE clientes ADD COLUMN IF NOT EXISTS grupo TEXT;",
             "ALTER TABLE itens_notas ADD COLUMN IF NOT EXISTS saldo_financeiro REAL DEFAULT 0;",
-            "UPDATE itens_notas SET saldo_financeiro = valor_item WHERE saldo_financeiro = 0 AND valor_item > 0;"
+            "UPDATE itens_notas SET saldo_financeiro = valor_item WHERE saldo_financeiro = 0 AND valor_item > 0;",
+            
+            # --- MIGRAÇÕES PARA NOTAS DE RETORNO ---
+            # Garante a existência da coluna cnpj_emitente
+            "ALTER TABLE notas_retorno ADD COLUMN IF NOT EXISTS cnpj_emitente TEXT;",
+            
+            # Tenta renomear cnpj_cliente para cnpj_remetente se a antiga ainda existir
+            # (Bloco DO anônimo para evitar erro se a coluna não existir)
+            """
+            DO $$
+            BEGIN
+                IF EXISTS(SELECT * FROM information_schema.columns WHERE table_name = 'notas_retorno' AND column_name = 'cnpj_cliente') THEN
+                    ALTER TABLE notas_retorno RENAME COLUMN cnpj_cliente TO cnpj_remetente;
+                END IF;
+            END $$;
+            """
         ]
 
         try:
             with self.get_connection() as conn:
                 with conn.cursor() as cursor:
+                    # 1. Cria tabelas se não existirem
                     for q in queries_creation:
                         cursor.execute(q)
+                    
+                    # 2. Aplica alterações (ALTER) se necessário
                     for q in queries_migration:
                         cursor.execute(q)
+                
                 conn.commit()
             print("Database setup completed successfully.")
             return True  

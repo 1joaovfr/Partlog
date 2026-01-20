@@ -22,6 +22,7 @@ class RetornoHeaderDTO:
     data_emissao: str
     tipo_retorno: str
     valor_total: float
-    cnpj: Optional[str] = None
-    grupo: Optional[str] = None
+    cnpj_emitente: str            # <--- NOVO: Sua empresa
+    cnpj_remetente: Optional[str] = None # <--- O Cliente
+    grupo: Optional[str] = None   # <--- Opcional se for busca por grupo
     observacao: str = ""
