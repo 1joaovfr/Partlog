@@ -40,7 +40,7 @@ class RetornoModel:
             
             lista_dto = []
             for r in resultados:
-                # ADICIONADO: Tratamento para caso venha None do banco
+                # Tratamento para caso venha None do banco
                 cod_analise_db = r['codigo_analise'] if r['codigo_analise'] else ""
                 
                 lista_dto.append(ItemPendenteDTO(
@@ -53,7 +53,6 @@ class RetornoModel:
                     saldo_financeiro=float(r['saldo_financeiro']),
                     nome_cliente=r['nome_cliente'],
                     grupo_economico=r['grupo'],
-                    # ADICIONADO: Passando o valor do banco para o DTO
                     codigo_analise=cod_analise_db 
                 ))
             return lista_dto
@@ -85,16 +84,16 @@ class RetornoModel:
                 id_retorno = cursor.fetchone()[0]
 
                 for item in itens:
-                    # Atualiza o saldo (usa o valor total do item, conforme lógica nova)
+                    # Atualiza o saldo
                     sql_upd = "UPDATE itens_notas SET saldo_financeiro = saldo_financeiro - %s WHERE id = %s"
                     cursor.execute(sql_upd, (item.valor_a_abater, item.id))
 
-                    # Cria vínculo na conciliação COM O CÓDIGO DE ANÁLISE
+                    # CORRIGIDO: Removido 'codigo_analise' pois não existe na tabela 'conciliacao'
                     sql_con = """
-                        INSERT INTO conciliacao (id_nota_retorno, id_item_entrada, valor_abatido, codigo_analise) 
-                        VALUES (%s, %s, %s, %s)
+                        INSERT INTO conciliacao (id_nota_retorno, id_item_entrada, valor_abatido) 
+                        VALUES (%s, %s, %s)
                     """
-                    cursor.execute(sql_con, (id_retorno, item.id, item.valor_a_abater, item.codigo_analise))
+                    cursor.execute(sql_con, (id_retorno, item.id, item.valor_a_abater))
                 
                 conn.commit()
                 return True, "Nota de Retorno gravada com sucesso!"

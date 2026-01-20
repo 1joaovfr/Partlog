@@ -85,7 +85,7 @@ class MainWindow(QMainWindow):
         self.btn_toggle.setStyleSheet("background: transparent; border: none;")
         self.btn_toggle.clicked.connect(self.toggle_menu)
         
-        self.lbl_logo = QLabel("CARDEX")
+        self.lbl_logo = QLabel("Partlog")
         self.lbl_logo.setStyleSheet("color: #3a5f8a; font-size: 20px; font-weight: bold; margin-left: 10px;")
         
         self.header_layout.addWidget(self.btn_toggle)
