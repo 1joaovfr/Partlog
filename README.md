@@ -14,13 +14,13 @@
     <img alt="Docker" src="https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white"/>
   </p>
 
-  <p>
+<p>
     <a href="#-sobre-o-projeto">Sobre</a> •
     <a href="#-tecnologias">Tecnologias</a> •
-    <a href="#-pré-requisitos">Pré-requisitos</a> •
-    <a href="#-instalação">Instalação</a> •
-    <a href="#-estrutura-do-projeto">Estrutura</a> •
-    <a href="#-segurança">Segurança</a>
+    <a href="#-instalação-e-execução">Instalação</a> •
+    <a href="#-regras-de-negócio-implementadas">Regras de Negócio</a> •
+    <a href="#-diagrama-do-banco-de-dados">Diagrama DB</a> •
+    <a href="#-acesso-ao-banco-de-dados">Acesso DB</a>
   </p>
 </div>
 
