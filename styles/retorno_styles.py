@@ -58,15 +58,23 @@ QComboBox QAbstractItemView {{
 }}
 """
 
-# 3. Integração com os estilos existentes da tela de Retorno
+# 3. Integração com os estilos existentes
 RETORNO_STYLES = COMMON_STYLES + COMBOBOX_MODERNO + f"""
 
-/* --- CORREÇÃO DE FUNDO (#1b212d) --- */
+/* --- FORÇAR TRANSPARÊNCIA NOS CONTAINERS ESPECÍFICOS --- */
+QWidget#ContainerTransparente {{
+    background-color: transparent;
+    border: none;
+}}
+
+/* --- CHECKBOX E RADIO BUTTON --- */
+/* Força fundo transparente para pegar a cor da tela */
 QCheckBox, QRadioButton {{
-    background-color: #1b212d;
+    background-color: transparent; 
     spacing: 8px;
     color: {COLOR_TEXT};
     font-weight: 500;
+    border: none;
 }}
 
 /* --- ESTILO DOS INDICADORES (Bolinhas e Quadrados) --- */
@@ -75,7 +83,7 @@ QRadioButton::indicator {{
     height: 16px;
     border-radius: 9px;
     border: 1px solid {COLOR_INPUT_BORDER};
-    background-color: {COLOR_INPUT_BG};
+    background-color: {COLOR_INPUT_BG}; 
 }}
 QRadioButton::indicator:hover {{ border-color: {COLOR_FOCUS}; }}
 QRadioButton::indicator:checked {{
@@ -96,6 +104,23 @@ QCheckBox::indicator:checked {{
     border: 1px solid {COLOR_FOCUS};
 }}
 
+/* --- LABELS GERAIS --- */
+/* Garante que todas as labels soltas sejam transparentes */
+QLabel {{
+    background-color: transparent; 
+    color: {COLOR_TEXT};
+    border: none;
+}}
+
+/* --- TÍTULOS DE SEÇÃO --- */
+QLabel#SectionTitle {{
+    color: #8ab4f8;
+    background-color: transparent;
+    border-bottom: 1px solid {COLOR_CARD_BORDER};
+    padding-bottom: 5px;
+    font-weight: bold;
+}}
+
 /* --- TABELA (QTableView) --- */
 QTableView::indicator {{
     width: 18px;
@@ -109,37 +134,23 @@ QTableView::indicator:checked {{
     border: 1px solid {COLOR_FOCUS};
 }}
 
-/* --- LABELS --- */
-QLabel {{
-    background-color: transparent; 
-    color: {COLOR_TEXT};
-}}
-QLabel#SectionTitle {{
-    color: #8ab4f8;
-    border-bottom: 1px solid {COLOR_CARD_BORDER};
-    padding-bottom: 5px;
-    font-weight: bold;
-}}
-
-/* --- TABELA CONFIG --- */
+/* --- CONFIGURAÇÕES GERAIS DA TABELA --- */
 QTableWidget {{
     selection-background-color: {COLOR_SELECTION};
     gridline-color: {COLOR_CARD_BORDER};
     border: none; 
     background-color: {COLOR_TABLE_BG};
 }}
-/* Ajuste dos cantos superiores da tabela dentro do card */
 QHeaderView::section:first {{ border-top-left-radius: 6px; }}
 QHeaderView::section:last {{ border-top-right-radius: 6px; }}
 QTableWidget::item {{ padding: 5px; }}
 
-/* --- SPINBOXES (Igual Lançamento) --- */
+/* --- SPINBOXES --- */
 QSpinBox::up-button, QSpinBox::down-button,
 QDoubleSpinBox::up-button, QDoubleSpinBox::down-button {{
     width: 0px;
     border-width: 0px;
 }}
-
 QSpinBox, QDoubleSpinBox {{
     padding-right: 0px; 
 }}

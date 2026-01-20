@@ -2,11 +2,10 @@ import sys
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, 
                                QComboBox, QPushButton, QFrame, QTableWidget, QTableWidgetItem, 
                                QHeaderView, QDoubleSpinBox, QMessageBox, QRadioButton, 
-                               QButtonGroup, QDateEdit)
+                               QButtonGroup, QDateEdit, QSizePolicy)
 from PySide6.QtCore import Qt, QDate
 from PySide6.QtGui import QColor
 
-# Mantendo seus imports originais
 from controllers.retorno_controller import RetornoController
 from dtos.retorno_dto import RetornoHeaderDTO, ItemPendenteDTO
 from styles.common import get_date_edit_style
@@ -27,292 +26,271 @@ class PageRetorno(QWidget):
         layout.setSpacing(15)
         layout.setContentsMargins(20, 20, 20, 20)
 
-        self.setup_header(layout)
-        self.setup_filters(layout) # Alterado
+        self.setup_header_area(layout)
         self.setup_content_area(layout)
+        self.atualizar_interface_dinamica()
 
-        # Garante o estado inicial correto
-        self.atualizar_visibilidade_filtros()
-
-    def setup_header(self, parent_layout):
+    def setup_header_area(self, parent_layout):
         frame = QFrame(objectName="FormCard")
         vbox = QVBoxLayout(frame)
-        vbox.addWidget(QLabel("DADOS DA NOTA DE RETORNO", objectName="SectionTitle"))
         
-        hbox = QHBoxLayout()
+        vbox.addWidget(QLabel("Retorno de Notas de Garantia", objectName="SectionTitle"))
         
-        # --- 1. COMBOBOX (Tamanho Fixo) ---
+        # --- LINHA 1 ---
+        hbox_row1 = QHBoxLayout()
+        hbox_row1.setContentsMargins(0, 0, 0, 0)
+
+        # 1. Tipo
         self.combo_tipo = QComboBox()
         self.combo_tipo.addItems(["Garantia Simples", "Tratativa de Crédito", "Itens de Giro"])
-        self.combo_tipo.setFixedWidth(200) # Tamanho fixo definido
-        self.combo_tipo.currentIndexChanged.connect(self.atualizar_visibilidade_filtros)
-        
-        # --- 2. NOTA FISCAL (Tamanho Fixo igual Lançamento) ---
-        self.txt_num_nota = QLineEdit(placeholderText="Nº Nota Retorno")
-        self.txt_num_nota.setFixedWidth(150) # Tamanho fixo definido
-        
-        # --- 3. EMISSÃO (Já estava fixo) ---
+        self.combo_tipo.setFixedWidth(170)
+        self.combo_tipo.currentIndexChanged.connect(self.atualizar_interface_dinamica)
+        self.add_field(hbox_row1, "Tipo de Retorno", self.combo_tipo)
+
+        # 2. CNPJ Emitente
+        self.txt_cnpj_emitente = QLineEdit()
+        self.txt_cnpj_emitente.setPlaceholderText("Sua Empresa")
+        self.txt_cnpj_emitente.setInputMask("99.999.999/9999-99;_")
+        self.txt_cnpj_emitente.setFixedWidth(150)
+        self.add_field(hbox_row1, "CNPJ Emitente", self.txt_cnpj_emitente)
+
+        # 3. Número Nota
+        self.txt_num_nota = QLineEdit()
+        self.txt_num_nota.setPlaceholderText("Nº Nota")
+        self.txt_num_nota.setFixedWidth(150)
+        self.add_field(hbox_row1, "Número Nota", self.txt_num_nota)
+
+        # 4. Emissão
         self.date_emissao = QDateEdit(calendarPopup=True, date=QDate.currentDate())
-        self.date_emissao.setFixedWidth(130) 
-        
-        # --- 4. VALOR (Já estava fixo) ---
+        self.date_emissao.setFixedWidth(130)
+        self.add_field(hbox_row1, "Emissão", self.date_emissao)
+
+        # 5. Valor Total
         self.spin_valor_retorno = QDoubleSpinBox()
         self.spin_valor_retorno.setPrefix("R$ ")
-        self.spin_valor_retorno.setRange(0.00, 999999.99)
+        self.spin_valor_retorno.setRange(0.00, 9999999.99)
         self.spin_valor_retorno.setFixedWidth(100)
-        self.spin_valor_retorno.setSpecialValueText(" ")
-        self.spin_valor_retorno.setValue(0.00)
+        self.spin_valor_retorno.setButtonSymbols(QDoubleSpinBox.NoButtons)
         self.spin_valor_retorno.valueChanged.connect(self.recalcular_totais)
+        self.add_field(hbox_row1, "Valor Total", self.spin_valor_retorno)
 
-        # Adicionando ao layout com stretch=0 (para respeitar o tamanho fixo)
-        self.add_field(hbox, "Tipo de Retorno:", self.combo_tipo, 0)
-        self.add_field(hbox, "Número Nota:", self.txt_num_nota, 0)
-        self.add_field(hbox, "Emissão:", self.date_emissao, 0)
-        self.add_field(hbox, "Valor Total:", self.spin_valor_retorno, 0)
+        self.container_remetente = QWidget()
+        self.container_remetente.setObjectName("ContainerRemetente")
+        self.container_remetente.setStyleSheet("""
+            #ContainerRemetente { 
+                background-color: transparent; 
+                border: none; 
+            }
+        """)
         
-        # Empurra tudo para a esquerda para não ficar buracos entre os campos
-        hbox.addStretch()
+        self.container_remetente.setFixedWidth(150) 
+        v_remetente = QVBoxLayout(self.container_remetente)
+        v_remetente.setContentsMargins(0,0,0,0)
+        v_remetente.setSpacing(2)
         
-        vbox.addLayout(hbox)
-        parent_layout.addWidget(frame)
+        self.lbl_remetente_dinamico = QLabel("CNPJ Remetente")
+        self.lbl_remetente_dinamico.setStyleSheet("background-color: transparent; border: none;")
+        
+        self.txt_remetente_dinamico = QLineEdit()
+        self.txt_remetente_dinamico.setInputMask("99.999.999/9999-99;_")
+        self.txt_remetente_dinamico.setFixedWidth(150)
+        
+        v_remetente.addWidget(self.lbl_remetente_dinamico)
+        v_remetente.addWidget(self.txt_remetente_dinamico)
+        hbox_row1.addWidget(self.container_remetente)
+        hbox_row1.addStretch()
 
-    def setup_filters(self, parent_layout):
-        """
-        REFORMULADO: Separa os Radio Buttons dos Inputs para permitir
-        reutilizar o container padrão (CNPJ+NF) no modo Giro.
-        """
-        frame = QFrame(objectName="FormCard")
-        # Layout principal horizontal
-        self.layout_filtros_wrapper = QHBoxLayout(frame)
-        self.layout_filtros_wrapper.setContentsMargins(15, 15, 15, 15)
+        vbox.addLayout(hbox_row1)
+
+        # --- LINHA 2 ---
+        hbox_row2 = QHBoxLayout()
+        hbox_row2.setContentsMargins(0, 5, 0, 0)
         
-        # --- 1. CONTAINER DOS RADIO BUTTONS (Aparece só em Giro) ---
-        self.container_radios = QWidget()
-        layout_radios_wrapper = QVBoxLayout(self.container_radios)
-        layout_radios_wrapper.setContentsMargins(0, 0, 15, 0) # Margem direita para separar
+        # A) Checkboxes
+        self.container_checks = QWidget()
+        self.container_checks.setStyleSheet("background-color: transparent; border: none;")
+        hbox_checks = QHBoxLayout(self.container_checks)
+        hbox_checks.setContentsMargins(0, 0, 15, 0)
+        hbox_checks.setSpacing(10)
         
         self.group_modo = QButtonGroup(self)
-        self.rb_grupo = QRadioButton("Por Grupo Econômico")
-        self.rb_nota = QRadioButton("Por CNPJ (Nota Fiscal)")
+        self.rb_grupo = QRadioButton("Por Grupo")
+        self.rb_cnpj = QRadioButton("Por CNPJ")
+        self.rb_cnpj.setChecked(True)
         
-        self.rb_grupo.setCursor(Qt.PointingHandCursor)
-        self.rb_nota.setCursor(Qt.PointingHandCursor)
-        self.rb_grupo.setChecked(True) # Padrão
+        style_rb = f"background-color: transparent; color: {COLOR_TEXT};"
+        self.rb_grupo.setStyleSheet(style_rb)
+        self.rb_cnpj.setStyleSheet(style_rb)
         
         self.group_modo.addButton(self.rb_grupo)
-        self.group_modo.addButton(self.rb_nota)
+        self.group_modo.addButton(self.rb_cnpj)
         
-        # Conecta a mudança dos radios à visibilidade dos inputs
-        self.rb_grupo.toggled.connect(self.atualizar_visibilidade_filtros)
-        self.rb_nota.toggled.connect(self.atualizar_visibilidade_filtros)
+        self.rb_grupo.toggled.connect(self.atualizar_interface_dinamica)
+        self.rb_cnpj.toggled.connect(self.atualizar_interface_dinamica)
 
-        layout_radios_wrapper.addWidget(QLabel("Modo de Busca:"))
-        layout_radios_wrapper.addWidget(self.rb_grupo)
-        layout_radios_wrapper.addWidget(self.rb_nota)
-        
-        # --- 2. CONTAINER DE INPUTS (Stack lógico) ---
-        
-        # A) Container PADRÃO (CNPJ + NF) - Usado em Garantia, Crédito e Giro(Por CNPJ)
-        self.container_padrao = QWidget()
-        layout_padrao = QHBoxLayout(self.container_padrao)
-        layout_padrao.setContentsMargins(0, 0, 0, 0)
-        
-        # --- ALTERAÇÃO AQUI: Padronização com o Módulo de Lançamento ---
-        self.txt_cnpj_padrao = QLineEdit(placeholderText="CNPJ Emitente") 
-        self.txt_cnpj_padrao.setInputMask("99.999.999/9999-99;_")
-        self.txt_cnpj_padrao.setFixedWidth(150)
-        
-        self.txt_nf_garantia = QLineEdit(placeholderText="Nº Nota(s) de Garantia")
-        
-        # O stretch do CNPJ foi alterado para 0 (fixo) e o da Nota para 1 (expansível)
-        self.add_field(layout_padrao, "CNPJ do Cliente:", self.txt_cnpj_padrao, 0)
-        self.add_field(layout_padrao, "Nota Fiscal (Opcional):", self.txt_nf_garantia, 1)
-        
-        # B) Container GRUPO (Apenas input de texto simples) - Usado em Giro(Por Grupo)
-        self.container_input_grupo = QWidget()
-        layout_grupo = QHBoxLayout(self.container_input_grupo)
-        layout_grupo.setContentsMargins(0, 0, 0, 0)
-        
-        self.txt_termo_grupo = QLineEdit(placeholderText="Digite o nome do Grupo Econômico")
-        self.add_field(layout_grupo, "Nome do Grupo:", self.txt_termo_grupo, 1)
+        hbox_checks.addWidget(self.rb_grupo)
+        hbox_checks.addWidget(self.rb_cnpj)
+        hbox_row2.addWidget(self.container_checks) 
 
-        # --- 3. BOTÃO BUSCAR ---
-        vbox_btn = QVBoxLayout()
-        vbox_btn.addStretch()
-        btn_buscar = QPushButton(" BUSCAR PENDÊNCIAS", objectName="btn_primary")
+        # B) Campo de Notas
+        self.txt_busca_notas = QLineEdit()
+        self.txt_busca_notas.setPlaceholderText("Digite notas fiscais (separadas por espaço)...")
+        self.txt_busca_notas.setFixedHeight(34)
+        hbox_row2.addWidget(self.txt_busca_notas, stretch=1) 
+
+        # C) Botão Buscar
+        btn_buscar = QPushButton("Buscar Pendências")
+        btn_buscar.setObjectName("btn_primary")
         btn_buscar.setCursor(Qt.PointingHandCursor)
+        btn_buscar.setFixedWidth(180)
         btn_buscar.setFixedHeight(34)
         btn_buscar.clicked.connect(self.buscar)
-        vbox_btn.addWidget(btn_buscar)
+        hbox_row2.addWidget(btn_buscar)
 
-        # ADICIONANDO TUDO AO LAYOUT
-        # Ordem: Radios (se visivel) -> Inputs (Padrao ou Grupo) -> Botão
-        self.layout_filtros_wrapper.addWidget(self.container_radios, stretch=0)
-        self.layout_filtros_wrapper.addWidget(self.container_padrao, stretch=4)
-        self.layout_filtros_wrapper.addWidget(self.container_input_grupo, stretch=4)
-        self.layout_filtros_wrapper.addSpacing(15)
-        self.layout_filtros_wrapper.addLayout(vbox_btn, stretch=1)
-        
+        vbox.addLayout(hbox_row2)
         parent_layout.addWidget(frame)
 
+    def atualizar_interface_dinamica(self):
+        tipo = self.combo_tipo.currentText()
+        is_giro = (tipo == "Itens de Giro")
+
+        self.container_checks.setVisible(is_giro)
+        modo_grupo = is_giro and self.rb_grupo.isChecked()
+
+        if modo_grupo:
+            self.lbl_remetente_dinamico.setText("Grupo de Cliente:")
+            self.txt_remetente_dinamico.setInputMask("") 
+            self.txt_remetente_dinamico.setPlaceholderText("Nome do Grupo")
+            
+            self.txt_busca_notas.setEnabled(False)
+            self.txt_busca_notas.setPlaceholderText("Indisponível: busca por grupo")
+            self.txt_busca_notas.clear()
+        else:
+            self.lbl_remetente_dinamico.setText("CNPJ Remetente:")
+            self.txt_remetente_dinamico.setInputMask("99.999.999/9999-99;_")
+            self.txt_remetente_dinamico.setPlaceholderText("CNPJ do Cliente")
+            
+            self.txt_busca_notas.setEnabled(True)
+            self.txt_busca_notas.setPlaceholderText("Digite notas fiscais (separadas por espaço)...")
+
+    def buscar(self):
+        # 1. Captura e Limpeza
+        termo = self.txt_remetente_dinamico.text()
+        
+        if "CNPJ" in self.lbl_remetente_dinamico.text():
+            termo_clean = termo.replace(".", "").replace("/", "").replace("-", "").strip()
+        else:
+            termo_clean = termo.strip()
+
+        if not termo_clean:
+            QMessageBox.warning(self, "Aviso", "Preencha o campo de CNPJ ou Grupo na primeira linha.")
+            return
+
+        modo = "GRUPO" if (self.combo_tipo.currentText() == "Itens de Giro" and self.rb_grupo.isChecked()) else "CNPJ"
+
+        lista_notas = []
+        if self.txt_busca_notas.isEnabled():
+            raw_notas = self.txt_busca_notas.text()
+            lista_notas = [n.strip() for n in raw_notas.replace(",", " ").split() if n.strip()]
+
+        # 2. Busca
+        self.itens_carregados = self.controller.buscar_pendencias(termo_clean, modo, lista_notas)
+
+        # 3. Validação de Retorno Vazio
+        if not self.itens_carregados:
+            QMessageBox.information(self, "Busca", "Nenhuma pendência encontrada para os dados informados.\nVerifique se o CNPJ está correto e se a nota possui itens com saldo.")
+            self.table.setRowCount(0)
+            self.recalcular_totais()
+            return
+
+        self.popular_tabela()
+
     def setup_content_area(self, parent_layout):
-        # ... (O código da tabela e resumo permanece idêntico ao seu original) ...
         hbox_main = QHBoxLayout()
         hbox_main.setSpacing(15)
-        hbox_main.setContentsMargins(0, 0, 0, 0)
 
-        # --- CARD ESQUERDA: TABELA ---
+        # Tabela
         card_tabela = QFrame(objectName="FormCard")
         layout_tabela = QVBoxLayout(card_tabela)
-        
-        lbl_lista = QLabel("Itens Pendentes")
-        lbl_lista.setObjectName("SectionTitle")
-        layout_tabela.addWidget(lbl_lista)
+        layout_tabela.addWidget(QLabel("Itens Pendentes", objectName="SectionTitle"))
         
         self.table = QTableWidget()
-        colunas = ["", "NF Origem", "Data", "Item", "Cliente", "Saldo Disp.", "Abater (R$)"]
+        # Colunas atualizadas
+        colunas = ["", "NF Origem", "Data", "Item", "Cliente", "Saldo Disp.", "Cód. Análise"]
         self.table.setColumnCount(len(colunas))
         self.table.setHorizontalHeaderLabels(colunas)
+        
+        header = self.table.horizontalHeader()
+        header.setSectionResizeMode(QHeaderView.Stretch)
+        self.table.setColumnWidth(0, 50)
+        header.setSectionResizeMode(0, QHeaderView.Fixed)
         
         self.table.verticalHeader().setVisible(False)
         self.table.setAlternatingRowColors(True)
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
-        self.table.setEditTriggers(QTableWidget.NoEditTriggers)
-        self.table.setShowGrid(True)
-        self.table.setFrameShape(QFrame.NoFrame)
-        
-        header = self.table.horizontalHeader()
-        header.setSectionResizeMode(QHeaderView.Stretch)
-        self.table.setColumnWidth(0, 50) 
-        header.setSectionResizeMode(0, QHeaderView.Fixed)
-        
+        self.table.setEditTriggers(QTableWidget.DoubleClicked | QTableWidget.SelectedClicked)
         self.table.itemChanged.connect(self.on_table_change)
         
         layout_tabela.addWidget(self.table)
         hbox_main.addWidget(card_tabela, stretch=1)
 
-        # --- CARD DIREITA: RESUMO ---
+        # Resumo
         self.panel_resumo = QFrame(objectName="FormCard")
         self.panel_resumo.setFixedWidth(260)
-        
         vbox_res = QVBoxLayout(self.panel_resumo)
-        vbox_res.setContentsMargins(15, 20, 15, 20)
+        vbox_res.setSpacing(15)
         
         vbox_res.addWidget(QLabel("Resumo Financeiro", objectName="SectionTitle"))
-        vbox_res.addSpacing(15)
         
         self.lbl_total_nota = self.add_resumo_row(vbox_res, "Total Nota:", COLOR_TEXT)
         self.lbl_total_sel = self.add_resumo_row(vbox_res, "Selecionado:", COLOR_INFO)
         
         line = QFrame()
         line.setFrameShape(QFrame.HLine)
-        line.setStyleSheet(f"color: {COLOR_CARD_BORDER}; background-color: {COLOR_CARD_BORDER};")
+        line.setStyleSheet(f"background-color: {COLOR_CARD_BORDER};")
         line.setFixedHeight(1)
         vbox_res.addWidget(line)
         
         self.lbl_diff = self.add_resumo_row(vbox_res, "Diferença:", COLOR_TEXT_DIM)
         
         vbox_res.addStretch()
-        
         self.btn_confirmar = QPushButton("CONFIRMAR", objectName="btn_success")
         self.btn_confirmar.setFixedHeight(45)
-        self.btn_confirmar.setCursor(Qt.PointingHandCursor)
         self.btn_confirmar.setEnabled(False)
         self.btn_confirmar.clicked.connect(self.salvar_final)
         vbox_res.addWidget(self.btn_confirmar)
         
         hbox_main.addWidget(self.panel_resumo)
-        parent_layout.addLayout(hbox_main, stretch=1)
+        parent_layout.addLayout(hbox_main)
 
-    def add_field(self, layout, label_text, widget, stretch=0):
+    def add_field(self, layout, text, widget):
         v = QVBoxLayout()
         v.setSpacing(2)
-        lbl = QLabel(label_text)
+        lbl = QLabel(text)
+        lbl.setStyleSheet("background-color: transparent; border: none;") 
         v.addWidget(lbl)
         v.addWidget(widget)
-        layout.addLayout(v, stretch)
+        layout.addLayout(v, stretch=0)
 
     def add_resumo_row(self, layout, titulo, cor):
         wid = QWidget()
+        wid.setStyleSheet("background-color: transparent; border: none;")
+        
         h = QHBoxLayout(wid)
-        h.setContentsMargins(0,6,0,6)
-        lbl = QLabel(titulo)
-        lbl.setStyleSheet("background-color: transparent;") 
-        h.addWidget(lbl)
+        h.setContentsMargins(0,5,0,5)
+        
+        lbl_tit = QLabel(titulo)
+        lbl_tit.setStyleSheet("background-color: transparent; border: none; color: " + COLOR_TEXT)
+        h.addWidget(lbl_tit)
         
         val = QLabel("R$ 0,00")
-        val.setStyleSheet(f"color: {cor}; font-size: 15px; font-weight: bold; background-color: transparent;")
-        val.setAlignment(Qt.AlignRight)
-        h.addWidget(val)
+        val.setStyleSheet(f"color: {cor}; font-weight: bold; background-color: transparent; border: none;")
+        h.addWidget(val, alignment=Qt.AlignRight)
+        
         layout.addWidget(wid)
         return val
 
-    # --- LÓGICA DE INTERFACE REFORMULADA ---
-    def atualizar_visibilidade_filtros(self):
-        tipo_selecionado = self.combo_tipo.currentText()
-        is_giro = (tipo_selecionado == "Itens de Giro")
-        
-        # 1. Visibilidade dos Radio Buttons
-        self.container_radios.setVisible(is_giro)
-        
-        # 2. Lógica para mostrar qual container de Input usar
-        if is_giro:
-            # Dentro de Giro, olhamos os Radios
-            if self.rb_grupo.isChecked():
-                # Giro -> Por Grupo
-                self.container_padrao.setVisible(False)
-                self.container_input_grupo.setVisible(True)
-            else:
-                # Giro -> Por CNPJ (Aqui reutilizamos o container padrão!)
-                self.container_padrao.setVisible(True)
-                self.container_input_grupo.setVisible(False)
-        else:
-            # Garantia ou Crédito -> Sempre usa CNPJ+NF
-            self.container_padrao.setVisible(True)
-            self.container_input_grupo.setVisible(False)
-
-    # --- LÓGICA DE NEGÓCIO REFORMULADA ---
-    def buscar(self):
-        tipo = self.combo_tipo.currentText()
-        
-        termo = ""
-        modo = "CNPJ"
-        nf_filtro = None
-
-        # Lógica para decidir de onde tirar os dados
-        usar_busca_grupo = False
-        
-        if tipo == "Itens de Giro":
-            if self.rb_grupo.isChecked():
-                usar_busca_grupo = True
-            else:
-                usar_busca_grupo = False # É Giro, mas por CNPJ
-        else:
-            usar_busca_grupo = False # Garantia/Crédito
-
-        if usar_busca_grupo:
-            # Busca por Grupo
-            termo = self.txt_termo_grupo.text()
-            modo = "GRUPO"
-        else:
-            # Busca por CNPJ (seja Giro ou Normal)
-            termo = self.txt_cnpj_padrao.text()
-            modo = "CNPJ"
-            nf_input = self.txt_nf_garantia.text()
-            if nf_input:
-                nf_filtro = nf_input
-
-        # Validação
-        if not termo:
-            msg_campo = "Nome do Grupo" if modo == "GRUPO" else "CNPJ do Cliente"
-            QMessageBox.warning(self, "Atenção", f"Preencha o campo {msg_campo}.")
-            return
-
-        self.itens_carregados = self.controller.buscar_pendencias(termo, modo, nf_filtro)
-        self.popular_tabela()
-
     def popular_tabela(self):
-        # ... (O código permanece idêntico) ...
         self.table.blockSignals(True)
         self.table.setRowCount(0)
         for i, dto in enumerate(self.itens_carregados):
@@ -324,33 +302,41 @@ class PageRetorno(QWidget):
             chk.setData(Qt.UserRole, dto)
             self.table.setItem(i, 0, chk)
             
-            def c(t): 
-                it = QTableWidgetItem(str(t)) 
-                it.setTextAlignment(Qt.AlignCenter)
-                return it
+            # Bloqueio de edição para campos informativos
+            item_nf = QTableWidgetItem(str(dto.numero_nota_origem))
+            item_nf.setFlags(item_nf.flags() ^ Qt.ItemIsEditable)
+            self.table.setItem(i, 1, item_nf)
+
+            data_s = dto.data_nota_origem.strftime("%d/%m/%Y") if hasattr(dto.data_nota_origem, 'strftime') else str(dto.data_nota_origem)
+            item_data = QTableWidgetItem(data_s)
+            item_data.setFlags(item_data.flags() ^ Qt.ItemIsEditable)
+            self.table.setItem(i, 2, item_data)
+
+            item_cod = QTableWidgetItem(str(dto.codigo_item))
+            item_cod.setFlags(item_cod.flags() ^ Qt.ItemIsEditable)
+            self.table.setItem(i, 3, item_cod)
+
+            item_cli = QTableWidgetItem(dto.nome_cliente)
+            item_cli.setFlags(item_cli.flags() ^ Qt.ItemIsEditable)
+            self.table.setItem(i, 4, item_cli)
             
-            self.table.setItem(i, 1, c(dto.numero_nota_origem))
-            data_str = dto.data_nota_origem.strftime("%d/%m/%Y") if hasattr(dto.data_nota_origem, 'strftime') else str(dto.data_nota_origem)
-            self.table.setItem(i, 2, c(data_str))
-            
-            self.table.setItem(i, 3, c(dto.codigo_item))
-            self.table.setItem(i, 4, c(dto.nome_cliente))
-            
-            val = c(f"{dto.saldo_financeiro:.2f}")
+            val = QTableWidgetItem(f"{dto.saldo_financeiro:.2f}")
             val.setForeground(QColor(COLOR_INFO))
+            val.setFlags(val.flags() ^ Qt.ItemIsEditable)
             self.table.setItem(i, 5, val)
             
-            abat = c(f"{dto.saldo_financeiro:.2f}")
-            abat.setBackground(QColor(COLOR_INPUT_BG))
-            self.table.setItem(i, 6, abat)
+            # Coluna editável: Código de Análise
+            cod_analise = QTableWidgetItem(str(dto.codigo_analise)) 
+            self.table.setItem(i, 6, cod_analise)
+            
         self.table.blockSignals(False)
         self.recalcular_totais()
 
     def on_table_change(self, item):
+        # Monitora Checkbox (0) e Código de Análise (6)
         if item.column() in [0, 6]: self.recalcular_totais()
 
     def recalcular_totais(self):
-        # ... (O código permanece idêntico) ...
         val_nota = self.spin_valor_retorno.value()
         total_sel = 0.0
         linhas_marcadas = 0
@@ -359,84 +345,74 @@ class PageRetorno(QWidget):
             chk = self.table.item(r, 0)
             if chk.checkState() == Qt.Checked:
                 linhas_marcadas += 1
-                try:
-                    val = float(self.table.item(r, 6).text().replace(",", "."))
-                    total_sel += val
-                    dto = chk.data(Qt.UserRole)
-                    dto.valor_a_abater = val
-                    dto.selecionado = True
-                except: pass
-            else:
-                chk.data(Qt.UserRole).selecionado = False
+                dto = chk.data(Qt.UserRole)
+                
+                # Assume saldo total como valor a abater
+                dto.valor_a_abater = dto.saldo_financeiro 
+                
+                # Lê o código digitado
+                texto_cod = self.table.item(r, 6).text() 
+                dto.codigo_analise = texto_cod 
+                
+                total_sel += dto.valor_a_abater
 
         diff = val_nota - total_sel
         self.lbl_total_nota.setText(f"R$ {val_nota:,.2f}")
         self.lbl_total_sel.setText(f"R$ {total_sel:,.2f}")
         self.lbl_diff.setText(f"R$ {diff:,.2f}")
+        
+        # --- LÓGICA DE VALIDAÇÃO VISUAL ---
+        margem = 10.0 if self.combo_tipo.currentText() == "Itens de Giro" else 0.10
+        esta_no_prazo = abs(diff) <= margem
 
-        liberado = False
-        msg = "CONFIRMAR"
-        cor = COLOR_TEXT_DIM
-
-        if linhas_marcadas > 0:
-            if self.combo_tipo.currentText() == "Itens de Giro":
-                liberado = abs(diff) < 10.0
-            else:
-                liberado = abs(diff) < 0.10
-            
-            if liberado: cor = COLOR_SUCCESS
-            elif total_sel > val_nota: msg = "VALOR EXCEDIDO"; cor = COLOR_DANGER
-            else: msg = "AJUSTE VALOR"; cor = COLOR_WARNING
-
-        if linhas_marcadas == 0: msg = "SELECIONE ITENS"
-
-        self.lbl_diff.setStyleSheet(f"color: {cor}; font-size: 15px; font-weight: bold; background-color: transparent;")
-        self.btn_confirmar.setText(msg)
-        self.btn_confirmar.setEnabled(liberado)
-        self.btn_confirmar.setObjectName("btn_success" if liberado else "btn_disabled")
-        self.btn_confirmar.setStyle(self.btn_confirmar.style())
+        # ALTERAÇÃO AQUI:
+        # Habilita o botão se tiver linhas marcadas, MESMO se o valor estiver errado.
+        # Assim o usuário consegue clicar e receber a mensagem de erro.
+        self.btn_confirmar.setEnabled(linhas_marcadas > 0)
+        
+        # Mantém o feedback visual (Verde se OK, Vermelho se Errado)
+        cor = COLOR_SUCCESS if esta_no_prazo else COLOR_DANGER
+        self.lbl_diff.setStyleSheet(f"color: {cor}; font-weight: bold; background-color: transparent; border: none;")
 
     def salvar_final(self):
-        # ... (O código permanece idêntico até a parte de pegar os CNPJs) ...
         itens = []
         for r in range(self.table.rowCount()):
             chk = self.table.item(r, 0)
             if chk.checkState() == Qt.Checked:
                 itens.append(chk.data(Qt.UserRole))
+
+        cnpj_remetente = None
+        grupo = None
+        valor_campo_dinamico = self.txt_remetente_dinamico.text()
         
-        cnpj_final = None
-        grupo_final = None
-        
-        # Ajuste na lógica de captura dos dados finais
-        if self.combo_tipo.currentText() == "Itens de Giro":
-            if self.rb_grupo.isChecked():
-                grupo_final = self.txt_termo_grupo.text()
-            else:
-                # Giro por CNPJ usa o campo padrão
-                cnpj_final = self.txt_cnpj_padrao.text()
+        if self.combo_tipo.currentText() == "Itens de Giro" and self.rb_grupo.isChecked():
+            grupo = valor_campo_dinamico
         else:
-            cnpj_final = self.txt_cnpj_padrao.text()
+            cnpj_remetente = valor_campo_dinamico.replace(".", "").replace("/", "").replace("-", "")
+
+        cnpj_emitente_limpo = self.txt_cnpj_emitente.text().replace(".", "").replace("/", "").replace("-", "")
 
         header = RetornoHeaderDTO(
             numero_nota=self.txt_num_nota.text(),
             data_emissao=self.date_emissao.date().toString("yyyy-MM-dd"),
             tipo_retorno=self.combo_tipo.currentText(),
             valor_total=self.spin_valor_retorno.value(),
-            cnpj=cnpj_final,
-            grupo=grupo_final
+            cnpj_emitente=cnpj_emitente_limpo,
+            cnpj_remetente=cnpj_remetente,
+            grupo=grupo
         )
         
         ok, msg = self.controller.salvar_processo(header, itens)
+        
         if ok:
             QMessageBox.information(self, "Sucesso", msg)
             self.resetar_tela()
         else:
-            QMessageBox.warning(self, "Erro", msg)
+            QMessageBox.warning(self, "Erro de Validação", msg)
 
     def resetar_tela(self):
-        self.txt_cnpj_padrao.clear()
-        self.txt_nf_garantia.clear()
-        self.txt_termo_grupo.clear()
+        self.txt_remetente_dinamico.clear()
+        self.txt_busca_notas.clear()
         self.txt_num_nota.clear()
         self.spin_valor_retorno.setValue(0)
         self.table.setRowCount(0)

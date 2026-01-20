@@ -43,7 +43,7 @@ class RelatorioModel:
             -- Join do Emitente (Cliente da Garantia)
             LEFT JOIN clientes c ON n.cnpj_cliente = c.cnpj
             
-            -- Join do Remetente (Sua Empresa/Filial) <--- NOVO
+            -- Join do Remetente (Sua Empresa/Filial)
             LEFT JOIN clientes cr ON n.cnpj_remetente = cr.cnpj
             
             LEFT JOIN itens i ON l.codigo_item = i.codigo_item
@@ -52,7 +52,8 @@ class RelatorioModel:
             LEFT JOIN conciliacao conc ON l.id = conc.id_item_entrada
             LEFT JOIN notas_retorno nr ON conc.id_nota_retorno = nr.id
             
-            ORDER BY n.data_lancamento DESC
+            -- CORREÇÃO AQUI (Tela: Do mais novo para o mais antigo)
+            ORDER BY n.data_lancamento DESC, n.numero_nota DESC, l.codigo_analise ASC
         """
         dados_brutos = self.db.execute_query(sql, fetch=True)
         return [RelatorioItemDTO.from_dict(d) for d in dados_brutos]
@@ -96,7 +97,7 @@ class RelatorioModel:
             FROM itens_notas l
             JOIN notas_fiscais n ON l.id_nota_fiscal = n.id
             LEFT JOIN clientes c ON n.cnpj_cliente = c.cnpj
-            LEFT JOIN clientes cr ON n.cnpj_remetente = cr.cnpj -- <--- NOVO JOIN
+            LEFT JOIN clientes cr ON n.cnpj_remetente = cr.cnpj 
             LEFT JOIN itens i ON l.codigo_item = i.codigo_item
             LEFT JOIN avarias a ON l.codigo_avaria = a.codigo_avaria
             
@@ -104,7 +105,9 @@ class RelatorioModel:
             LEFT JOIN notas_retorno nr ON conc.id_nota_retorno = nr.id
 
             WHERE n.data_lancamento BETWEEN %s AND %s
-            ORDER BY n.data_lancamento ASC
+            
+            -- CORREÇÃO AQUI (Excel: Cronológico crescente)
+            ORDER BY n.data_lancamento ASC, n.numero_nota ASC, l.codigo_analise ASC
         """
         try:
             dados = self.db.execute_query(sql, (data_inicio, data_fim), fetch=True)
@@ -116,7 +119,7 @@ class RelatorioModel:
             # Garantir a ordem exata das colunas no Excel
             ordem_colunas = [
                 "Lançamento", "Recebimento", "Análise", "Status", "Cód. Análise",
-                "CNPJ Remetente", "Remetente", # <--- NOVAS COLUNAS NO EXCEL
+                "CNPJ Remetente", "Remetente", 
                 "CNPJ Emitente", "Emitente", "Grp. Cliente", "Cidade", "UF", "Região", 
                 "Emissão", "Nota Fiscal",
                 "Item", "Grp. Item", "Num. Série", "Cód. Avaria", "Desc. Avaria", 

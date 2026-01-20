@@ -1,6 +1,15 @@
 from dataclasses import dataclass
 from datetime import date
-from typing import Optional
+
+@dataclass
+class RetornoHeaderDTO:
+    numero_nota: str
+    data_emissao: str
+    tipo_retorno: str
+    valor_total: float
+    cnpj_emitente: str
+    cnpj_remetente: str
+    grupo: str
 
 @dataclass
 class ItemPendenteDTO:
@@ -13,15 +22,6 @@ class ItemPendenteDTO:
     saldo_financeiro: float
     nome_cliente: str
     grupo_economico: str
-    selecionado: bool = False
+    # Campos manipulados na View
     valor_a_abater: float = 0.0
-
-@dataclass
-class RetornoHeaderDTO:
-    numero_nota: str
-    data_emissao: str
-    tipo_retorno: str
-    valor_total: float
-    cnpj: Optional[str] = None
-    grupo: Optional[str] = None
-    observacao: str = ""
+    codigo_analise: str = ""  # NOVO CAMPO
