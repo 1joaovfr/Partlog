@@ -53,7 +53,7 @@ Principais funcionalidades:
 
 ```bash
 # 1. Clone o repositório
-git clone [https://github.com/SEU_USUARIO/partlog.git](https://github.com/SEU_USUARIO/partlog.git)
+git clone https://github.com/1joaovfr/Partlog.git
 cd partlog
 
 # 2. Suba o container do Banco de Dados
@@ -196,7 +196,6 @@ erDiagram
 O projeto utiliza um container **PostgreSQL 16 Alpine**. Para conectar ferramentas de gerenciamento (DBeaver, pgAdmin, Datagrip), utilize as credenciais definidas no `docker-compose.yml`:
 
 | Parâmetro | Valor Padrão |
-|Data | Valor |
 | :--- | :--- |
 | **Host** | `localhost` |
 | **Porta** | `5432` |
