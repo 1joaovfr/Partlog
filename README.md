@@ -112,48 +112,82 @@ O módulo `DashboardModel` calcula KPIs em tempo real:
 * **Gap de Recebimento:** Diferença média de dias entre a chegada física e o lançamento no sistema.
 * **Análise de Safra:** Comparativo financeiro entre Entrada vs. Saída (Devolução) nos últimos 6 meses.
 
+## 🗺️ Diagrama do Banco de Dados
+
 ```mermaid
 erDiagram
-    NOTAS_FISCAIS ||--|{ ITENS_NOTAS : contem
-    CLIENTES ||--|{ NOTAS_FISCAIS : emite
-    ITENS ||--|{ ITENS_NOTAS : define
-    AVARIAS ||--|{ ITENS_NOTAS : classifica
-    
-    NOTAS_RETORNO ||--|{ CONCILIACAO : gera
-    ITENS_NOTAS ||--|{ CONCILIACAO : abatido_em
+    %% Tabela Clientes e suas relações
+    CLIENTES ||--|{ NOTAS_FISCAIS : "emite (cliente) / envia (remetente)"
+    CLIENTES {
+        string cnpj PK
+        string cliente
+        string grupo
+        string cidade
+        string estado
+    }
 
+    %% Tabela Itens e Avarias (Cadastros)
+    ITENS ||--|{ ITENS_NOTAS : define
+    ITENS {
+        string codigo_item PK
+        string descricao_item
+        string grupo_item
+    }
+
+    AVARIAS ||--|{ ITENS_NOTAS : classifica
+    AVARIAS {
+        string codigo_avaria PK
+        string descricao_avaria
+        string status_avaria
+    }
+
+    %% Tabela Notas Fiscais (Entrada)
+    NOTAS_FISCAIS ||--|{ ITENS_NOTAS : contem
     NOTAS_FISCAIS {
         int id PK
         string numero_nota
+        date data_nota
         string cnpj_cliente FK
-        string cnpj_remetente
-        date data_lancamento
+        string cnpj_remetente FK
         date data_recebimento
+        date data_lancamento
     }
 
+    %% Tabela Itens das Notas (O coração do sistema)
+    ITENS_NOTAS ||--|{ CONCILIACAO : "é abatido em"
     ITENS_NOTAS {
         int id PK
         int id_nota_fiscal FK
-        string codigo_analise
-        string status
+        string codigo_item FK
         decimal valor_item
+        decimal ressarcimento
         decimal saldo_financeiro
+        string status
+        string codigo_analise
         string numero_serie
+        string codigo_avaria FK
     }
 
+    %% Tabela Notas de Retorno (Saída/Fechamento)
+    NOTAS_RETORNO ||--|{ CONCILIACAO : gera
     NOTAS_RETORNO {
         int id PK
         string numero_nota
-        string tipo_retorno
         date data_emissao
-        decimal valor_total
+        string tipo_retorno
+        string cnpj_emitente "Novo"
+        string cnpj_remetente "Novo"
+        string grupo_economico "Novo"
+        decimal valor_total_nota
     }
 
+    %% Tabela Conciliação (Ligação N:N)
     CONCILIACAO {
         int id PK
         int id_nota_retorno FK
         int id_item_entrada FK
         decimal valor_abatido
+        date data_conciliacao
     }
 ```
 
