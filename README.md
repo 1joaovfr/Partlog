@@ -112,14 +112,15 @@ O módulo `DashboardModel` calcula KPIs em tempo real:
 * **Gap de Recebimento:** Diferença média de dias entre a chegada física e o lançamento no sistema.
 * **Análise de Safra:** Comparativo financeiro entre Entrada vs. Saída (Devolução) nos últimos 6 meses.
 
+```mermaid
 erDiagram
-    NOTAS_FISCAIS ||--|{ ITENS_NOTAS : "contém"
-    CLIENTES ||--|{ NOTAS_FISCAIS : "emite"
-    ITENS ||--|{ ITENS_NOTAS : "define"
-    AVARIAS ||--|{ ITENS_NOTAS : "classifica"
+    NOTAS_FISCAIS ||--|{ ITENS_NOTAS : contem
+    CLIENTES ||--|{ NOTAS_FISCAIS : emite
+    ITENS ||--|{ ITENS_NOTAS : define
+    AVARIAS ||--|{ ITENS_NOTAS : classifica
     
-    NOTAS_RETORNO ||--|{ CONCILIACAO : "gera"
-    ITENS_NOTAS ||--|{ CONCILIACAO : "é abatido em"
+    NOTAS_RETORNO ||--|{ CONCILIACAO : gera
+    ITENS_NOTAS ||--|{ CONCILIACAO : abatido_em
 
     NOTAS_FISCAIS {
         int id PK
@@ -133,8 +134,8 @@ erDiagram
     ITENS_NOTAS {
         int id PK
         int id_nota_fiscal FK
-        string codigo_analise "Ex: A0001"
-        string status "Pendente/Procedente"
+        string codigo_analise
+        string status
         decimal valor_item
         decimal saldo_financeiro
         string numero_serie
@@ -143,7 +144,7 @@ erDiagram
     NOTAS_RETORNO {
         int id PK
         string numero_nota
-        string tipo_retorno "Devolução/Ressarcimento"
+        string tipo_retorno
         date data_emissao
         decimal valor_total
     }
@@ -154,6 +155,7 @@ erDiagram
         int id_item_entrada FK
         decimal valor_abatido
     }
+```
 
 ## 🗄️ Acesso ao Banco de Dados
 
