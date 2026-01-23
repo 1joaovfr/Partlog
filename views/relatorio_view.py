@@ -6,14 +6,14 @@ import qtawesome as qta
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, 
                                QFrame, QTableWidget, QTableWidgetItem, QHeaderView, 
                                QFileDialog, QMessageBox, QAbstractItemView,
-                               QDialog, QDateEdit, QFormLayout)
-from PySide6.QtCore import Qt, QDate, QPoint
+                               QDialog, QDateEdit, QFormLayout, QLineEdit)
+from PySide6.QtCore import Qt, QDate, QPoint, QTimer
 
-from controllers import RelatorioController
-
+from controllers.relatorio_controller import RelatorioController
 from styles.relatorio_styles import RELATORIO_STYLES
 from styles.common import get_date_edit_style
 
+# --- Manteve-se a classe ExportarPopup igual ---
 class ExportarPopup(QDialog):
     def __init__(self, target_widget, parent=None):
         super().__init__(parent)
@@ -64,24 +64,15 @@ class ExportarPopup(QDialog):
         self.posicionar_janela()
 
     def posicionar_janela(self):
-        # 1. Pega a posição absoluta do botão na tela
         pos_global = self.target_widget.mapToGlobal(QPoint(0, 0))
-        
-        # 2. Calcula o X: Alinha à direita do botão
         x = pos_global.x() + self.target_widget.width() - self.width()
-        
-        # 3. Calcula o Y: Logo abaixo do botão
         y = pos_global.y() + self.target_widget.height()
-        
         self.move(x, y)
 
     def gerar_icone_calendario(self):
-        """Gera um ícone temporário para ser usado no CSS do QDateEdit"""
         icon = qta.icon('fa5s.calendar-alt', color='#8ab4f8') 
         caminho_arquivo = "temp_calendar_icon.png"
-        # Salva o ícone em disco para que o CSS possa ler (image: url(...))
         icon.pixmap(16, 16).save(caminho_arquivo)
-        # Retorna o caminho absoluto com barras normais (evita erro no Windows)
         return os.path.abspath(caminho_arquivo).replace("\\", "/")
 
 
@@ -90,24 +81,24 @@ class PageRelatorio(QWidget):
         super().__init__()
         self.setObjectName("PageRelatorio")
         
-        # --- 1. O CONTROLLER DEVE SER A PRIMEIRA COISA A SER CRIADA ---
-        # Se isso não existir, o carregar_dados() vai falhar
         self.controller = RelatorioController()
         
         self.setWindowTitle("Relatório Geral de Garantias")
-        
-        # --- APLICAÇÃO DE ESTILO ---
         self.setStyleSheet(RELATORIO_STYLES)
         
-        self.todos_dados = []    
+        # Dados brutos (tudo que vem do banco)
+        self.todos_dados = []
+        # Dados filtrados (o que será exibido/paginado após busca)
+        self.dados_filtrados = []
+        
         self.pagina_atual = 1
         self.itens_por_pagina = 50 
         self.total_paginas = 1
 
+        # Dicionário para guardar os inputs de filtro {coluna_index: QLineEdit}
+        self.filtros_widgets = {}
+
         self.setup_ui()
-        
-        # --- 2. AGORA PODEMOS CARREGAR OS DADOS ---
-        # Só chame isso depois que self.controller já existe
         self.carregar_dados()
 
     def setup_ui(self):
@@ -139,17 +130,13 @@ class PageRelatorio(QWidget):
         # --- DEFINIÇÃO DAS COLUNAS DA TABELA ---
         self.colunas = [
             "Lançamento", "Recebimento", "Análise", "Status", "Cód. Análise",
-            
-            # NOVAS COLUNAS
             "CNPJ Remetente", "Remetente", 
-            
             "CNPJ Emitente", "Emitente", "Grp. Cliente", "Cidade", "UF", "Região", 
             "Emissão", "Nota Fiscal",
             "Item", "Grp. Item", "Num. Série", "Cód. Avaria", "Desc. Avaria", 
             "Valor", "Ressarc.",
             "Retorno", "NF Retorno", "Desc. Retorno"
         ]
-
         
         self.table = QTableWidget()
         self.table.setColumnCount(len(self.colunas))
@@ -157,20 +144,20 @@ class PageRelatorio(QWidget):
         self.table.setAlternatingRowColors(True)
         self.table.verticalHeader().setVisible(False)
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
-        self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        # Permite edição apenas na linha de filtro (tratado depois), 
+        # bloqueia edição nas células de dados via flag
         self.table.setShowGrid(False)
-        self.table.setFocusPolicy(Qt.NoFocus)
+        self.table.setFocusPolicy(Qt.StrongFocus)
         
         header = self.table.horizontalHeader()
         header.setDefaultSectionSize(120)
-        
-        # Ajustes de tamanho específicos
-        header.resizeSection(6, 200) # Remetente maior
-        header.resizeSection(8, 200) # Emitente maior
+        header.setStretchLastSection(True)
+        header.resizeSection(6, 200) # Remetente
+        header.resizeSection(8, 200) # Emitente
 
         card_layout.addWidget(self.table)
 
-        # --- PAGINAÇÃO (Mantém igual) ---
+        # --- PAGINAÇÃO ---
         pag_layout = QHBoxLayout()
         self.btn_prev = QPushButton(" Anterior")
         self.btn_prev.setObjectName("btn_pag")
@@ -196,55 +183,89 @@ class PageRelatorio(QWidget):
         card_layout.addLayout(pag_layout)
         main_layout.addWidget(self.card)
 
+        # --- CRIA A LINHA DE FILTROS ---
+        self.criar_linha_filtros()
+
+    def criar_linha_filtros(self):
+        """Insere a linha 0 com QLineEdits para busca"""
+        self.table.insertRow(0)
+        self.table.setRowHeight(0, 35) # Altura da linha de filtro
+
+        # Bloqueia a primeira célula (ou coloca um ícone de lupa)
+        item_lupa = QTableWidgetItem()
+        item_lupa.setFlags(Qt.NoItemFlags)
+        item_lupa.setIcon(qta.icon('fa5s.search', color='#5c6b7f'))
+        self.table.setItem(0, 0, item_lupa)
+
+        # Para cada coluna (a partir da 0 ou 1), cria o input
+        for col_idx in range(len(self.colunas)):
+            # Pula algumas colunas se quiser, ou faz em todas. 
+            # Aqui faremos em todas para ficar completo.
+            
+            inp = QLineEdit()
+            inp.setPlaceholderText(f"Filtrar...")
+            # Estilo minimalista para o input dentro da tabela
+            inp.setStyleSheet("""
+                QLineEdit { 
+                    background-color: #12161f; 
+                    border: 1px solid #2c3545; 
+                    border-radius: 0px;
+                    color: #dce1e8;
+                    font-size: 11px;
+                }
+                QLineEdit:focus { border: 1px solid #3a5f8a; }
+            """)
+            
+            # Conecta o sinal de texto alterado ao método de filtrar
+            inp.textChanged.connect(self.processar_filtragem)
+            
+            # Guarda referencia
+            self.filtros_widgets[col_idx] = inp
+            self.table.setCellWidget(0, col_idx, inp)
+
     def carregar_dados(self):
         try:
             lista_dtos = self.controller.buscar_dados()
             self.todos_dados = []
             
             for item in lista_dtos:
-                def fmt_moeda(val): return f"R$ {val:.2f}"
+                def fmt_moeda(val): 
+                    if val is None: return "R$ 0,00"
+                    return f"R$ {val:.2f}"
 
-                # ORDEM DEVE BATER COM self.colunas
                 linha = [
-                    item.data_lancamento,     # 1
-                    item.data_recebimento,    # 2
-                    item.data_analise,        # 3
-                    item.status,              # 4
-                    item.codigo_analise,      # 5
-                    
-                    # NOVOS
-                    item.cnpj_remetente,      # 6
-                    item.nome_remetente,      # 7
-                    
-                    item.cnpj,                # 8 (Emitente)
-                    item.nome_cliente,        # 9
-                    item.grupo_cliente,       # 10
-                    item.cidade,              # 11
-                    item.estado,              # 12
-                    item.regiao,              # 13
-                    
-                    item.data_emissao,        # 14
-                    item.nf_entrada,          # 15
-                    
-                    item.codigo_item,         # 16
-                    item.grupo_item,          # 17
-                    item.numero_serie,        # 18
-                    item.codigo_avaria,       # 19
-                    item.descricao_avaria,    # 20
-                    
-                    fmt_moeda(item.valor_item),    # 21
-                    fmt_moeda(item.ressarcimento), # 22
-                    
-                    item.data_retorno,        # 23
-                    item.nf_retorno,          # 24
-                    item.tipo_retorno         # 25
+                    item.data_lancamento,     # 0
+                    item.data_recebimento,    # 1
+                    item.data_analise,        # 2
+                    item.status,              # 3
+                    item.codigo_analise,      # 4
+                    item.cnpj_remetente,      # 5
+                    item.nome_remetente,      # 6
+                    item.cnpj,                # 7
+                    item.nome_cliente,        # 8
+                    item.grupo_cliente,       # 9
+                    item.cidade,              # 10
+                    item.estado,              # 11
+                    item.regiao,              # 12
+                    item.data_emissao,        # 13
+                    item.nf_entrada,          # 14
+                    item.codigo_item,         # 15
+                    item.grupo_item,          # 16
+                    item.numero_serie,        # 17
+                    item.codigo_avaria,       # 18
+                    item.descricao_avaria,    # 19
+                    fmt_moeda(item.valor_item),    # 20
+                    fmt_moeda(item.ressarcimento), # 21
+                    item.data_retorno,        # 22
+                    item.nf_retorno,          # 23
+                    item.tipo_retorno         # 24
                 ]
                 self.todos_dados.append(linha)
 
-            total_itens = len(self.todos_dados)
-            self.total_paginas = math.ceil(total_itens / self.itens_por_pagina)
-            if self.total_paginas < 1: self.total_paginas = 1
-            self.pagina_atual = 1
+            # Inicialmente, os dados filtrados são IGUAIS a todos os dados
+            self.dados_filtrados = list(self.todos_dados)
+            
+            self.calcular_paginacao()
             self.atualizar_tabela()
             
         except Exception as e:
@@ -252,18 +273,66 @@ class PageRelatorio(QWidget):
             import traceback
             traceback.print_exc()
 
-    # ... (atualizar_tabela, avancar_pagina, voltar_pagina, abrir_formulario_exportacao permanecem iguais) ...
+    def processar_filtragem(self):
+        """Chamado sempre que alguém digita em qualquer filtro"""
+        # 1. Captura os textos de todos os filtros
+        filtros_ativos = {}
+        for col_idx, widget in self.filtros_widgets.items():
+            texto = widget.text().lower().strip()
+            if texto:
+                filtros_ativos[col_idx] = texto
+        
+        # 2. Se não tem filtro, restaura tudo
+        if not filtros_ativos:
+            self.dados_filtrados = list(self.todos_dados)
+        else:
+            # 3. Filtra a lista principal
+            self.dados_filtrados = []
+            for linha in self.todos_dados:
+                match = True
+                for col_idx, texto_filtro in filtros_ativos.items():
+                    # Pega o valor da célula na lista de dados
+                    valor_celula = str(linha[col_idx]).lower() if linha[col_idx] else ""
+                    
+                    if texto_filtro not in valor_celula:
+                        match = False
+                        break
+                if match:
+                    self.dados_filtrados.append(linha)
+
+        # 4. Reseta para página 1 e atualiza
+        self.pagina_atual = 1
+        self.calcular_paginacao()
+        self.atualizar_tabela()
+
+    def calcular_paginacao(self):
+        total_itens = len(self.dados_filtrados)
+        self.total_paginas = math.ceil(total_itens / self.itens_por_pagina)
+        if self.total_paginas < 1: self.total_paginas = 1
+
     def atualizar_tabela(self):
+        # Definição do slice da página atual
         inicio = (self.pagina_atual - 1) * self.itens_por_pagina
         fim = inicio + self.itens_por_pagina
-        dados_da_pagina = self.todos_dados[inicio:fim]
-        self.table.setRowCount(len(dados_da_pagina))
-        for row_idx, row_data in enumerate(dados_da_pagina):
+        dados_da_pagina = self.dados_filtrados[inicio:fim]
+
+        # Ajusta o numero de linhas:
+        # Linha 0 (filtros) + Dados da Página
+        qtd_linhas_necessarias = 1 + len(dados_da_pagina)
+        self.table.setRowCount(qtd_linhas_necessarias)
+
+        # Preenche da linha 1 em diante (pois a 0 é filtro)
+        for i, row_data in enumerate(dados_da_pagina):
+            table_row = i + 1 
             for col_idx, valor in enumerate(row_data):
                 item = QTableWidgetItem(str(valor) if valor is not None else "")
                 item.setTextAlignment(Qt.AlignCenter)
-                self.table.setItem(row_idx, col_idx, item)
-        self.lbl_paginacao.setText(f"Página {self.pagina_atual} de {self.total_paginas}")
+                # Impede edição da célula de dado
+                item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
+                self.table.setItem(table_row, col_idx, item)
+
+        # Atualiza labels e botões
+        self.lbl_paginacao.setText(f"Página {self.pagina_atual} de {self.total_paginas} (Total: {len(self.dados_filtrados)})")
         self.btn_prev.setDisabled(self.pagina_atual == 1)
         self.btn_next.setDisabled(self.pagina_atual >= self.total_paginas)
 
@@ -291,6 +360,9 @@ class PageRelatorio(QWidget):
             path, _ = QFileDialog.getSaveFileName(self, "Salvar Excel", nome_arq, "Excel Files (*.xlsx)")
             
             if path:
+                # Aqui continuamos exportando TUDO do banco para o Excel pela query original
+                # (Geralmente exportação ignora filtro de tela e usa data, mas se quiser 
+                # exportar o filtrado da tela, precisaríamos alterar o controller)
                 sucesso = self.controller.exportar_excel(path, data_ini, data_fim)
                 if sucesso:
                     QMessageBox.information(self, "Sucesso", "Arquivo gerado com sucesso!")
