@@ -1,80 +1,15 @@
 import sys
 import math
-import os 
-from datetime import date, datetime, timedelta
+from datetime import date, datetime # Importado datetime para conversão
 import qtawesome as qta
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, 
-                               QFrame, QTableWidget, QTableWidgetItem, QHeaderView, 
+                               QFrame, QTableWidget, QTableWidgetItem, 
                                QFileDialog, QMessageBox, QAbstractItemView,
-                               QDialog, QDateEdit, QFormLayout, QLineEdit)
-from PySide6.QtCore import Qt, QDate, QPoint, QTimer
+                               QDialog, QDateEdit, QLineEdit)
+from PySide6.QtCore import Qt, QPoint
 
 from controllers.relatorio_controller import RelatorioController
 from styles.relatorio_styles import RELATORIO_STYLES
-from styles.common import get_date_edit_style
-
-# --- Manteve-se a classe ExportarPopup igual ---
-class ExportarPopup(QDialog):
-    def __init__(self, target_widget, parent=None):
-        super().__init__(parent)
-        self.target_widget = target_widget 
-        
-        self.setWindowFlags(Qt.Popup | Qt.FramelessWindowHint)
-        self.setFixedWidth(200) 
-        
-        self.icon_path = self.gerar_icone_calendario()
-        
-        style_date_edit = get_date_edit_style(self.icon_path)
-        self.setStyleSheet(RELATORIO_STYLES + style_date_edit)
-        
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(10, 10, 10, 10)
-        layout.setSpacing(8)
-
-        lbl_style = "color: #a0aec0; font-size: 11px; font-weight: bold;"
-        
-        lbl_ini = QLabel("De:")
-        lbl_ini.setStyleSheet(lbl_style)
-        self.dt_inicio = QDateEdit()
-        self.dt_inicio.setCalendarPopup(True) 
-        self.dt_inicio.setDisplayFormat("dd/MM/yyyy")
-        hoje = date.today()
-        self.dt_inicio.setDate(date(hoje.year, hoje.month, 1))
-        
-        lbl_fim = QLabel("Até:")
-        lbl_fim.setStyleSheet(lbl_style)
-        self.dt_fim = QDateEdit()
-        self.dt_fim.setCalendarPopup(True)
-        self.dt_fim.setDisplayFormat("dd/MM/yyyy")
-        self.dt_fim.setDate(hoje)
-
-        layout.addWidget(lbl_ini)
-        layout.addWidget(self.dt_inicio)
-        layout.addWidget(lbl_fim)
-        layout.addWidget(self.dt_fim)
-        
-        self.btn_confirmar = QPushButton("Exportar")
-        self.btn_confirmar.setObjectName("btn_confirmar")
-        self.btn_confirmar.setCursor(Qt.PointingHandCursor)
-        self.btn_confirmar.clicked.connect(self.accept) 
-        
-        layout.addSpacing(5)
-        layout.addWidget(self.btn_confirmar)
-        
-        self.posicionar_janela()
-
-    def posicionar_janela(self):
-        pos_global = self.target_widget.mapToGlobal(QPoint(0, 0))
-        x = pos_global.x() + self.target_widget.width() - self.width()
-        y = pos_global.y() + self.target_widget.height()
-        self.move(x, y)
-
-    def gerar_icone_calendario(self):
-        icon = qta.icon('fa5s.calendar-alt', color='#8ab4f8') 
-        caminho_arquivo = "temp_calendar_icon.png"
-        icon.pixmap(16, 16).save(caminho_arquivo)
-        return os.path.abspath(caminho_arquivo).replace("\\", "/")
-
 
 class PageRelatorio(QWidget):
     def __init__(self):
@@ -86,17 +21,18 @@ class PageRelatorio(QWidget):
         self.setWindowTitle("Relatório Geral de Garantias")
         self.setStyleSheet(RELATORIO_STYLES)
         
-        # Dados brutos (tudo que vem do banco)
         self.todos_dados = []
-        # Dados filtrados (o que será exibido/paginado após busca)
         self.dados_filtrados = []
         
         self.pagina_atual = 1
         self.itens_por_pagina = 50 
         self.total_paginas = 1
 
-        # Dicionário para guardar os inputs de filtro {coluna_index: QLineEdit}
         self.filtros_widgets = {}
+
+        # Mapeamento dos índices das colunas que são DATAS
+        # 0=Lançamento, 1=Recebimento, 2=Análise, 13=Emissão, 22=Retorno
+        self.colunas_data = [0, 1, 2, 13, 22]
 
         self.setup_ui()
         self.carregar_dados()
@@ -112,22 +48,14 @@ class PageRelatorio(QWidget):
 
         # --- CABEÇALHO ---
         header_layout = QHBoxLayout()
+        
         lbl_titulo = QLabel("Relatório Analítico de Garantias")
         lbl_titulo.setObjectName("SectionTitle")
-        header_layout.addWidget(lbl_titulo, 1)
-        
-        self.btn_excel = QPushButton()
-        self.btn_excel.setCursor(Qt.PointingHandCursor)
-        self.btn_excel.setIcon(qta.icon('fa5s.file-excel', color='#8ab4f8', scale_factor=1.2)) 
-        self.btn_excel.setIconSize(qta.QtCore.QSize(20, 20)) 
-        self.btn_excel.setObjectName("btn_excel") 
-        self.btn_excel.setToolTip("Exportar para Excel")
-        self.btn_excel.clicked.connect(self.abrir_formulario_exportacao) 
-        header_layout.addWidget(self.btn_excel)
+        header_layout.addWidget(lbl_titulo)
         
         card_layout.addLayout(header_layout)
 
-        # --- DEFINIÇÃO DAS COLUNAS DA TABELA ---
+        # --- DEFINIÇÃO DAS COLUNAS ---
         self.colunas = [
             "Lançamento", "Recebimento", "Análise", "Status", "Cód. Análise",
             "CNPJ Remetente", "Remetente", 
@@ -144,29 +72,24 @@ class PageRelatorio(QWidget):
         self.table.setAlternatingRowColors(True)
         self.table.verticalHeader().setVisible(False)
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
-        # Permite edição apenas na linha de filtro (tratado depois), 
-        # bloqueia edição nas células de dados via flag
         self.table.setShowGrid(False)
         self.table.setFocusPolicy(Qt.StrongFocus)
         
         header = self.table.horizontalHeader()
         header.setDefaultSectionSize(120)
         header.setStretchLastSection(True)
-        header.resizeSection(6, 200) # Remetente
-        header.resizeSection(8, 200) # Emitente
+        header.resizeSection(6, 200)
+        header.resizeSection(8, 200)
 
         card_layout.addWidget(self.table)
 
-        # --- PAGINAÇÃO ---
+        # --- PAGINAÇÃO E EXPORTAÇÃO ---
         pag_layout = QHBoxLayout()
+        
         self.btn_prev = QPushButton(" Anterior")
         self.btn_prev.setObjectName("btn_pag")
         self.btn_prev.setIcon(qta.icon('fa5s.chevron-left', color='white')) 
         self.btn_prev.clicked.connect(self.voltar_pagina)
-
-        self.lbl_paginacao = QLabel(f"Página 0 de 0")
-        self.lbl_paginacao.setObjectName("lbl_pag")
-        self.lbl_paginacao.setAlignment(Qt.AlignCenter)
 
         self.btn_next = QPushButton("Próximo ")
         self.btn_next.setObjectName("btn_pag")
@@ -175,36 +98,45 @@ class PageRelatorio(QWidget):
         self.btn_next.clicked.connect(self.avancar_pagina)
 
         pag_layout.addWidget(self.btn_prev)
-        pag_layout.addStretch()
-        pag_layout.addWidget(self.lbl_paginacao)
-        pag_layout.addStretch()
         pag_layout.addWidget(self.btn_next)
+        pag_layout.addStretch()
+
+        self.lbl_paginacao = QLabel(f"Página 0 de 0")
+        self.lbl_paginacao.setObjectName("lbl_pag")
+        self.lbl_paginacao.setAlignment(Qt.AlignCenter)
+        pag_layout.addWidget(self.lbl_paginacao)
+
+        pag_layout.addStretch()
+
+        self.btn_excel = QPushButton(" Exportar Excel") 
+        self.btn_excel.setCursor(Qt.PointingHandCursor)
+        self.btn_excel.setIcon(qta.icon('fa5s.file-excel', color='#8ab4f8', scale_factor=1.0)) 
+        self.btn_excel.setIconSize(qta.QtCore.QSize(24, 24)) 
+        self.btn_excel.setObjectName("btn_excel") 
+        self.btn_excel.setToolTip("Exportar dados visualizados para Excel")
+        self.btn_excel.clicked.connect(self.abrir_formulario_exportacao) 
+        
+        pag_layout.addWidget(self.btn_excel)
 
         card_layout.addLayout(pag_layout)
         main_layout.addWidget(self.card)
 
-        # --- CRIA A LINHA DE FILTROS ---
         self.criar_linha_filtros()
 
     def criar_linha_filtros(self):
-        """Insere a linha 0 com QLineEdits para busca"""
         self.table.insertRow(0)
-        self.table.setRowHeight(0, 35) # Altura da linha de filtro
+        self.table.setRowHeight(0, 35) 
 
-        # Bloqueia a primeira célula (ou coloca um ícone de lupa)
-        item_lupa = QTableWidgetItem()
-        item_lupa.setFlags(Qt.NoItemFlags)
-        item_lupa.setIcon(qta.icon('fa5s.search', color='#5c6b7f'))
-        self.table.setItem(0, 0, item_lupa)
-
-        # Para cada coluna (a partir da 0 ou 1), cria o input
         for col_idx in range(len(self.colunas)):
-            # Pula algumas colunas se quiser, ou faz em todas. 
-            # Aqui faremos em todas para ficar completo.
-            
             inp = QLineEdit()
-            inp.setPlaceholderText(f"Filtrar...")
-            # Estilo minimalista para o input dentro da tabela
+            
+            # Placeholder diferenciado para colunas de data
+            if col_idx in self.colunas_data:
+                inp.setPlaceholderText("dd/mm/aa - dd/mm/aa")
+                inp.setToolTip("Ex: 01/01/2024 - 31/01/2024")
+            else:
+                inp.setPlaceholderText("Filtrar...")
+                
             inp.setStyleSheet("""
                 QLineEdit { 
                     background-color: #12161f; 
@@ -215,11 +147,7 @@ class PageRelatorio(QWidget):
                 }
                 QLineEdit:focus { border: 1px solid #3a5f8a; }
             """)
-            
-            # Conecta o sinal de texto alterado ao método de filtrar
             inp.textChanged.connect(self.processar_filtragem)
-            
-            # Guarda referencia
             self.filtros_widgets[col_idx] = inp
             self.table.setCellWidget(0, col_idx, inp)
 
@@ -262,9 +190,7 @@ class PageRelatorio(QWidget):
                 ]
                 self.todos_dados.append(linha)
 
-            # Inicialmente, os dados filtrados são IGUAIS a todos os dados
             self.dados_filtrados = list(self.todos_dados)
-            
             self.calcular_paginacao()
             self.atualizar_tabela()
             
@@ -273,37 +199,82 @@ class PageRelatorio(QWidget):
             import traceback
             traceback.print_exc()
 
+    # --- LÓGICA DE FILTRO ATUALIZADA ---
     def processar_filtragem(self):
-        """Chamado sempre que alguém digita em qualquer filtro"""
-        # 1. Captura os textos de todos os filtros
         filtros_ativos = {}
         for col_idx, widget in self.filtros_widgets.items():
             texto = widget.text().lower().strip()
             if texto:
                 filtros_ativos[col_idx] = texto
         
-        # 2. Se não tem filtro, restaura tudo
         if not filtros_ativos:
             self.dados_filtrados = list(self.todos_dados)
         else:
-            # 3. Filtra a lista principal
             self.dados_filtrados = []
             for linha in self.todos_dados:
                 match = True
                 for col_idx, texto_filtro in filtros_ativos.items():
-                    # Pega o valor da célula na lista de dados
                     valor_celula = str(linha[col_idx]).lower() if linha[col_idx] else ""
                     
-                    if texto_filtro not in valor_celula:
-                        match = False
-                        break
+                    # Verifica se é coluna de data e tenta lógica de range
+                    if col_idx in self.colunas_data and ("-" in texto_filtro or " a " in texto_filtro):
+                        is_match_data = self.verificar_range_data(valor_celula, texto_filtro)
+                        if not is_match_data:
+                            match = False
+                            break
+                    else:
+                        # Lógica padrão (texto contém texto)
+                        if texto_filtro not in valor_celula:
+                            match = False
+                            break
                 if match:
                     self.dados_filtrados.append(linha)
 
-        # 4. Reseta para página 1 e atualiza
         self.pagina_atual = 1
         self.calcular_paginacao()
         self.atualizar_tabela()
+
+    def verificar_range_data(self, data_celula_str, filtro_str):
+        """
+        Tenta comparar data_celula (dd/mm/yyyy) com um range no filtro (ex: '01/01/2023 - 31/01/2023')
+        Retorna True se estiver dentro, False se fora.
+        Se o filtro estiver mal formatado, retorna False (ou True se quiser fallback).
+        """
+        try:
+            # 1. Converte a data da célula
+            # data_celula_str vem do banco, ex: "28/01/2026"
+            dt_celula = datetime.strptime(data_celula_str.strip(), "%d/%m/%Y").date()
+            
+            # 2. Separa o filtro (aceita "-" ou " a ")
+            if " a " in filtro_str:
+                partes = filtro_str.split(" a ")
+            else:
+                partes = filtro_str.split("-")
+            
+            if len(partes) != 2:
+                return False # Formato inválido, não bate
+
+            ini_str = partes[0].strip()
+            fim_str = partes[1].strip()
+            
+            # 3. Converte as datas do filtro
+            # Tenta formatos com 4 digitos no ano ou 2 digitos
+            fmt = "%d/%m/%Y" if len(ini_str.split("/")[-1]) == 4 else "%d/%m/%y"
+            dt_ini = datetime.strptime(ini_str, fmt).date()
+            
+            fmt = "%d/%m/%Y" if len(fim_str.split("/")[-1]) == 4 else "%d/%m/%y"
+            dt_fim = datetime.strptime(fim_str, fmt).date()
+            
+            # 4. Compara
+            return dt_ini <= dt_celula <= dt_fim
+
+        except ValueError:
+            # Se deu erro de conversão (data inválida ou incompleta), 
+            # assumimos que não é um range válido ainda (enquanto o user digita)
+            # Retornamos False para esconder, ou poderiamos tentar fallback textual.
+            return False
+        except Exception:
+            return False
 
     def calcular_paginacao(self):
         total_itens = len(self.dados_filtrados)
@@ -311,27 +282,21 @@ class PageRelatorio(QWidget):
         if self.total_paginas < 1: self.total_paginas = 1
 
     def atualizar_tabela(self):
-        # Definição do slice da página atual
         inicio = (self.pagina_atual - 1) * self.itens_por_pagina
         fim = inicio + self.itens_por_pagina
         dados_da_pagina = self.dados_filtrados[inicio:fim]
 
-        # Ajusta o numero de linhas:
-        # Linha 0 (filtros) + Dados da Página
         qtd_linhas_necessarias = 1 + len(dados_da_pagina)
         self.table.setRowCount(qtd_linhas_necessarias)
 
-        # Preenche da linha 1 em diante (pois a 0 é filtro)
         for i, row_data in enumerate(dados_da_pagina):
             table_row = i + 1 
             for col_idx, valor in enumerate(row_data):
                 item = QTableWidgetItem(str(valor) if valor is not None else "")
                 item.setTextAlignment(Qt.AlignCenter)
-                # Impede edição da célula de dado
                 item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
                 self.table.setItem(table_row, col_idx, item)
 
-        # Atualiza labels e botões
         self.lbl_paginacao.setText(f"Página {self.pagina_atual} de {self.total_paginas} (Total: {len(self.dados_filtrados)})")
         self.btn_prev.setDisabled(self.pagina_atual == 1)
         self.btn_next.setDisabled(self.pagina_atual >= self.total_paginas)
@@ -347,24 +312,36 @@ class PageRelatorio(QWidget):
             self.atualizar_tabela()
 
     def abrir_formulario_exportacao(self):
-        dialog = ExportarPopup(target_widget=self.btn_excel, parent=self)
-        if dialog.exec(): 
-            data_ini = dialog.dt_inicio.date().toPython()
-            data_fim = dialog.dt_fim.date().toPython()
-            
-            if data_fim < data_ini:
-                QMessageBox.warning(self, "Erro", "A data final não pode ser menor que a inicial.")
+        # 1. Verifica se tem algum dado para exportar
+        if not self.dados_filtrados:
+            QMessageBox.warning(self, "Aviso", "Não há dados na tela para exportar.")
+            return
+
+        # 2. Verifica se existe algum filtro ativo
+        tem_filtro_ativo = False
+        for widget in self.filtros_widgets.values():
+            if widget.text().strip():
+                tem_filtro_ativo = True
+                break
+        
+        # 3. Se NÃO tiver filtro, pede confirmação
+        if not tem_filtro_ativo:
+            resp = QMessageBox.question(
+                self, 
+                "Exportar Tudo?", 
+                f"Nenhum filtro aplicado. Deseja exportar TODOS os registros ({len(self.dados_filtrados)} linhas)?",
+                QMessageBox.Yes | QMessageBox.No
+            )
+            if resp == QMessageBox.No:
                 return
 
-            nome_arq = f"Relatorio_Geral_{data_ini}_{data_fim}.xlsx"
-            path, _ = QFileDialog.getSaveFileName(self, "Salvar Excel", nome_arq, "Excel Files (*.xlsx)")
-            
-            if path:
-                # Aqui continuamos exportando TUDO do banco para o Excel pela query original
-                # (Geralmente exportação ignora filtro de tela e usa data, mas se quiser 
-                # exportar o filtrado da tela, precisaríamos alterar o controller)
-                sucesso = self.controller.exportar_excel(path, data_ini, data_fim)
-                if sucesso:
-                    QMessageBox.information(self, "Sucesso", "Arquivo gerado com sucesso!")
-                else:
-                    QMessageBox.warning(self, "Aviso", "Não foram encontrados dados neste período.")
+        # 4. Seleciona onde salvar
+        nome_padrao = f"Relatorio_Garantias_{date.today()}.xlsx"
+        path, _ = QFileDialog.getSaveFileName(self, "Salvar Excel", nome_padrao, "Excel Files (*.xlsx)")
+        
+        if path:
+            sucesso = self.controller.exportar_excel(path, self.dados_filtrados, self.colunas)
+            if sucesso:
+                QMessageBox.information(self, "Sucesso", "Planilha exportada com sucesso!")
+            else:
+                QMessageBox.critical(self, "Erro", "Falha ao gerar o arquivo Excel.")

@@ -7,9 +7,9 @@ services:
     ports:
       - "5432:5432"
     environment:
-      - POSTGRES_USER=dev      # <--- Usuário
-      - POSTGRES_PASSWORD=indisa  # <--- Senha
-      - POSTGRES_DB=cardex_db    # <--- Nome do Banco
+      - POSTGRES_USER=system_user    # <--- Usuário
+      - POSTGRES_PASSWORD=954911 # <--- Senha
+      - POSTGRES_DB=partlogui_db  # <--- Nome do Banco
     volumes:
       - postgres_data:/var/lib/postgresql/data
 

@@ -4,9 +4,9 @@ from contextlib import contextmanager
 
 # Configuração de Banco de Dados
 DB_CONFIG = {
-    'dbname': 'cardex_db',
-    'user': 'dev',
-    'password': 'indisa',  
+    'dbname': 'partlogui_db',
+    'user': 'system_user',
+    'password': '954911',  
     'host': 'localhost',
     'port': '5432'
 }

@@ -1,7 +1,11 @@
-from styles.common import COMMON_STYLES
+from styles.common import COMMON_STYLES, get_date_edit_style
 from styles.theme import *
 
-RELATORIO_STYLES = COMMON_STYLES + f"""
+# Define o estilo do DateEdit usando o ícone fixo na pasta icons
+# Caminho baseado na sua estrutura: views/icons/temp_calendar_icon.png
+DATE_EDIT_CSS = get_date_edit_style("views/icons/temp_calendar_icon.png")
+
+RELATORIO_STYLES = COMMON_STYLES + DATE_EDIT_CSS + f"""
 /* --- ESPECÍFICO DE RELATÓRIOS --- */
 
 /* Popup Pequeno (Dialog de Filtro/Exportação) */
@@ -11,7 +15,7 @@ QDialog {{
     border-radius: 4px; 
 }}
 
-/* Botão Confirmar Compacto (usado dentro de calendários ou popups) */
+/* Botão Confirmar Compacto */
 QPushButton#btn_confirmar {{ 
     background-color: {COLOR_PRIMARY}; 
     color: white; 

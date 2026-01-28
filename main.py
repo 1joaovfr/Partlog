@@ -12,6 +12,7 @@ from views.analise_view import PageAnalise
 from views.relatorio_view import PageRelatorio
 from views.dashboard_view import PageDashboard
 from views.retorno_view import PageRetorno
+from views.ajuste_view import PageAjustes
 
 class MainWindow(QMainWindow):
     """
@@ -102,12 +103,15 @@ class MainWindow(QMainWindow):
         self.btn_ana = self.create_menu_btn(" Análise", "fa5s.microscope")
         self.btn_rel = self.create_menu_btn(" Relatório", "fa5s.table")
         self.btn_ret = self.create_menu_btn(" Retorno", "fa5s.boxes")
+        self.btn_aju = self.create_menu_btn(" Ajustes", "fa6s.pencil")
+
 
         self.layout_sidebar.addWidget(self.btn_dash)
         self.layout_sidebar.addWidget(self.btn_lanc)
         self.layout_sidebar.addWidget(self.btn_ana)
         self.layout_sidebar.addWidget(self.btn_rel)
         self.layout_sidebar.addWidget(self.btn_ret)
+        self.layout_sidebar.addWidget(self.btn_aju)
         
         self.layout_sidebar.addStretch()
 
@@ -136,6 +140,7 @@ class MainWindow(QMainWindow):
         self.pages.addWidget(PageAnalise())     # Index 2
         self.pages.addWidget(PageRelatorio())   # Index 3
         self.pages.addWidget(PageRetorno())     # Index 4
+        self.pages.addWidget(PageAjustes())     # Index 5
 
         # Monitora a mudança de página para atualizar dados (Refresh)
         self.pages.currentChanged.connect(self.on_page_change)
@@ -146,6 +151,8 @@ class MainWindow(QMainWindow):
         self.btn_ana.clicked.connect(lambda: self.pages.setCurrentIndex(2))
         self.btn_rel.clicked.connect(lambda: self.pages.setCurrentIndex(3))
         self.btn_ret.clicked.connect(lambda: self.pages.setCurrentIndex(4))
+        self.btn_aju.clicked.connect(lambda: self.pages.setCurrentIndex(5))
+
 
         main_layout.addWidget(self.sidebar)
         main_layout.addWidget(self.pages)
