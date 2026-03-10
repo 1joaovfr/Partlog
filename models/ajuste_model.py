@@ -6,11 +6,10 @@ class AjusteModel:
         self.db = DatabaseConnection()
 
     def get_dados_ajuste(self):
-        # Query similar ao relatório, mas pegando os IDs (l.id e n.id)
         sql = """
             SELECT 
                 l.id as id_item, n.id as id_nota, -- CAMPOS CRITICOS PARA UPDATE
-                l.status, l.codigo_analise, 
+                l.status, l.codigo_analise,
                 to_char(n.data_lancamento, 'DD/MM/YYYY') as data_lancamento,
                 to_char(n.data_recebimento, 'DD/MM/YYYY') as data_recebimento,
                 to_char(l.data_analise, 'DD/MM/YYYY') as data_analise,
