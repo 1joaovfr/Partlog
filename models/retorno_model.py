@@ -6,31 +6,37 @@ class RetornoModel:
         self.db = DatabaseConnection()
 
     def buscar_itens_pendentes(self, filtro_valor, tipo_filtro, lista_notas=None) -> list[ItemPendenteDTO]:
-            # Ajuste 1: Adicionado o status 'Pendente' na busca (se aplicável ao seu fluxo)
-            # Ajuste 2: Trocado o JOIN para usar nf.cnpj_remetente em vez de nf.cnpj_cliente
             query = """
                 SELECT 
                     i.id, nf.numero_nota, nf.data_nota, 
                     i.codigo_item, i.valor_item, i.saldo_financeiro,
-                    c.cliente as nome_cliente, c.grupo,
+                    COALESCE(c.cliente, 'Cliente Sem Cadastro') as nome_cliente, 
+                    COALESCE(c.grupo, '-') as grupo,
                     i.codigo_analise  
                 FROM itens_notas i
                 JOIN notas_fiscais nf ON i.id_nota_fiscal = nf.id
-                JOIN clientes c ON nf.cnpj_remetente = c.cnpj  -- < ALTERADO AQUI
+                -- LEFT JOIN: Garante que a nota venha mesmo se o cliente não existir na tabela 'clientes'
+                LEFT JOIN clientes c ON c.cnpj IN (nf.cnpj_cliente, nf.cnpj_remetente)
                 WHERE COALESCE(i.saldo_financeiro, 0) > 0 
-                AND i.status IN ('Pendente', 'Procedente', 'Improcedente') -- < ALTERADO AQUI
+                AND i.status IN ('Pendente', 'Procedente', 'Improcedente')
             """
             params = []
 
             if tipo_filtro == 'CNPJ':
-                # < ALTERADO AQUI também para bater com o JOIN
-                query += " AND REGEXP_REPLACE(nf.cnpj_remetente, '[^0-9]', '', 'g') = %s" 
-                params.append(filtro_valor)
+                # Busca blindada contra colunas nulas (procura no cliente e no remetente)
+                query += """ AND (
+                    REGEXP_REPLACE(COALESCE(nf.cnpj_remetente, ''), '[^0-9]', '', 'g') = %s 
+                    OR REGEXP_REPLACE(COALESCE(nf.cnpj_cliente, ''), '[^0-9]', '', 'g') = %s
+                )"""
+                params.extend([filtro_valor, filtro_valor])
                 
                 if lista_notas and len(lista_notas) > 0:
-                    placeholders = ', '.join(['%s'] * len(lista_notas))
-                    query += f" AND nf.numero_nota IN ({placeholders})"
-                    params.extend(lista_notas)
+                    # Remove os zeros (ex: '001' e '1' viram a mesma coisa)
+                    notas_limpas = [n.lstrip('0') for n in lista_notas]
+                    placeholders = ', '.join(['%s'] * len(notas_limpas))
+                    
+                    query += f" AND LTRIM(COALESCE(nf.numero_nota, ''), '0') IN ({placeholders})"
+                    params.extend(notas_limpas)
             
             elif tipo_filtro == 'GRUPO':
                 query += " AND c.grupo ILIKE %s"
@@ -59,7 +65,8 @@ class RetornoModel:
                     ))
                 return lista_dto
             except Exception as e:
-                print(f"Erro ao buscar: {e}")
+                # Imprime o erro no console para facilitar a investigação
+                print(f"Erro ao buscar pendências SQL: {e}")
                 return []
         
     def salvar_retorno(self, header: RetornoHeaderDTO, itens: list[ItemPendenteDTO]):
