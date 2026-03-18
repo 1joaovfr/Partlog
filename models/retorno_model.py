@@ -10,20 +10,20 @@ class RetornoModel:
                 SELECT 
                     i.id, nf.numero_nota, nf.data_nota, 
                     i.codigo_item, i.valor_item, i.saldo_financeiro,
-                    COALESCE(c.cliente, 'Cliente Sem Cadastro') as nome_cliente, 
+                    COALESCE(c.cliente, 'CLIENTE SEM CADASTRO') as nome_cliente, 
                     COALESCE(c.grupo, '-') as grupo,
                     i.codigo_analise  
                 FROM itens_notas i
                 JOIN notas_fiscais nf ON i.id_nota_fiscal = nf.id
-                -- LEFT JOIN: Garante que a nota venha mesmo se o cliente não existir na tabela 'clientes'
-                LEFT JOIN clientes c ON c.cnpj IN (nf.cnpj_cliente, nf.cnpj_remetente)
+                -- JOIN ESTREITO: Liga o cliente apenas por uma coluna para não duplicar linhas
+                LEFT JOIN clientes c ON REGEXP_REPLACE(COALESCE(c.cnpj, ''), '[^0-9]', '', 'g') = REGEXP_REPLACE(COALESCE(nf.cnpj_cliente, ''), '[^0-9]', '', 'g')
                 WHERE COALESCE(i.saldo_financeiro, 0) > 0 
                 AND i.status IN ('Pendente', 'Procedente', 'Improcedente')
             """
             params = []
 
             if tipo_filtro == 'CNPJ':
-                # Busca blindada contra colunas nulas (procura no cliente e no remetente)
+                # Busca o CNPJ independentemente de onde a importação o salvou
                 query += """ AND (
                     REGEXP_REPLACE(COALESCE(nf.cnpj_remetente, ''), '[^0-9]', '', 'g') = %s 
                     OR REGEXP_REPLACE(COALESCE(nf.cnpj_cliente, ''), '[^0-9]', '', 'g') = %s
@@ -31,11 +31,16 @@ class RetornoModel:
                 params.extend([filtro_valor, filtro_valor])
                 
                 if lista_notas and len(lista_notas) > 0:
-                    # Remove os zeros (ex: '001' e '1' viram a mesma coisa)
+                    # Trata notas com zero ('001') e sem zero ('1')
                     notas_limpas = [n.lstrip('0') for n in lista_notas]
+                    notas_limpas = [n if n else '0' for n in notas_limpas]
                     placeholders = ', '.join(['%s'] * len(notas_limpas))
                     
-                    query += f" AND LTRIM(COALESCE(nf.numero_nota, ''), '0') IN ({placeholders})"
+                    query += f""" AND (
+                        nf.numero_nota IN ({placeholders}) 
+                        OR LTRIM(COALESCE(nf.numero_nota, ''), '0') IN ({placeholders})
+                    )"""
+                    params.extend(lista_notas)
                     params.extend(notas_limpas)
             
             elif tipo_filtro == 'GRUPO':
@@ -65,10 +70,9 @@ class RetornoModel:
                     ))
                 return lista_dto
             except Exception as e:
-                # Imprime o erro no console para facilitar a investigação
-                print(f"Erro ao buscar pendências SQL: {e}")
+                print(f"Erro ao buscar no banco: {e}")
                 return []
-        
+                        
     def salvar_retorno(self, header: RetornoHeaderDTO, itens: list[ItemPendenteDTO]):
         conn_manager = self.db.get_connection()
         with conn_manager as conn:
